@@ -2,8 +2,28 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-const CONFIG_DIR = path.join(os.homedir(), ".mgm");
+function getConfigDir(): string {
+  const platform = process.platform;
+  if (platform === "win32") {
+    return path.join(process.env.APPDATA ?? path.join(os.homedir(), "AppData", "Roaming"), "mgm");
+  }
+  // macOS and Linux: follow XDG_CONFIG_HOME, default to ~/.config
+  return path.join(process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config"), "mgm");
+}
+
+const CONFIG_DIR = getConfigDir();
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
+
+// Migrate from legacy ~/.mgm/config.json if it exists
+const LEGACY_CONFIG = path.join(os.homedir(), ".mgm", "config.json");
+try {
+  if (fs.existsSync(LEGACY_CONFIG) && !fs.existsSync(CONFIG_FILE)) {
+    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.copyFileSync(LEGACY_CONFIG, CONFIG_FILE);
+    fs.unlinkSync(LEGACY_CONFIG);
+    try { fs.rmdirSync(path.dirname(LEGACY_CONFIG)); } catch {}
+  }
+} catch {}
 
 interface Config {
   token?: string;
