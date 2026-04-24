@@ -26,7 +26,7 @@ function generatePKCE() {
 // Browser-based OAuth login
 // ============================================================================
 
-async function browserLogin(): Promise<void> {
+async function browserLogin(opts: { signup?: boolean } = {}): Promise<void> {
   // 1. Start a local HTTP server to receive the callback
   const { port, waitForCallback, server } = await startCallbackServer();
   const redirectUri = `http://localhost:${port}/callback`;
@@ -72,10 +72,11 @@ async function browserLogin(): Promise<void> {
     state,
     scope: "mcp:tools",
   });
+  if (opts.signup) params.set("signup", "true");
 
   const authorizeUrl = `${APP_URL}/oauth/authorize?${params}`;
 
-  console.log("Opening browser to log in...");
+  console.log(opts.signup ? "Opening browser to create an account..." : "Opening browser to log in...");
   console.log();
   openBrowser(authorizeUrl);
   console.log("Waiting for authorization...");
@@ -240,6 +241,13 @@ export function registerAuthCommands(program: Command): void {
       }
 
       await browserLogin();
+    });
+
+  program
+    .command("signup")
+    .description("Create a new MostlyGoodMetrics account (opens browser)")
+    .action(async () => {
+      await browserLogin({ signup: true });
     });
 
   program
