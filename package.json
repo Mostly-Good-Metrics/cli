@@ -11,9 +11,15 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["analytics", "metrics", "cli"],
+  "keywords": [
+    "analytics",
+    "metrics",
+    "cli"
+  ],
   "author": "Mostly Good Metrics",
   "license": "MIT",
   "dependencies": {
@@ -21,14 +27,25 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.10"
   },
   "files": [
     "dist",
     "bin"
   ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/Mostly-Good-Metrics/cli.git"
+  },
+  "homepage": "https://github.com/Mostly-Good-Metrics/cli#readme",
+  "bugs": {
+    "url": "https://github.com/Mostly-Good-Metrics/cli/issues"
   }
 }
