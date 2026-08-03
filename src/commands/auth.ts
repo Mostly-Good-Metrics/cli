@@ -134,6 +134,14 @@ async function browserLogin(opts: { signup?: boolean } = {}): Promise<void> {
 // Local callback server
 // ============================================================================
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 interface CallbackResult {
   code?: string;
   state?: string;
@@ -160,19 +168,19 @@ function startCallbackServer(): Promise<{
         const error = url.searchParams.get("error") ?? undefined;
 
         // Show a nice page in the browser
-        res.writeHead(200, { "Content-Type": "text/html" });
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         if (code) {
           res.end(`
-            <html><body style="font-family: system-ui; text-align: center; padding: 60px;">
+            <html><head><meta charset="utf-8"></head><body style="font-family: system-ui; text-align: center; padding: 60px;">
               <h1 style="color: #667eea;">✓ Logged in!</h1>
               <p>You can close this tab and return to the terminal.</p>
             </body></html>
           `);
         } else {
           res.end(`
-            <html><body style="font-family: system-ui; text-align: center; padding: 60px;">
+            <html><head><meta charset="utf-8"></head><body style="font-family: system-ui; text-align: center; padding: 60px;">
               <h1 style="color: #ef4444;">Authorization failed</h1>
-              <p>${error ?? "Unknown error"}. Return to the terminal.</p>
+              <p>${escapeHtml(error ?? "Unknown error")}. Return to the terminal.</p>
             </body></html>
           `);
         }
