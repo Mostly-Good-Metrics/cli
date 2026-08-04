@@ -2,10 +2,18 @@
 
 Command-line interface for [MostlyGoodMetrics](https://mostlygoodmetrics.com) — manage projects, API keys, and dashboards, and run funnels, retention, and queries from your terminal.
 
+Documentation: [docs.mostlygoodmetrics.com](https://docs.mostlygoodmetrics.com)
+
 ## Install
 
+Coming to npm soon. For now, install from source:
+
 ```bash
-npm install -g @mostly-good-metrics/cli
+git clone https://github.com/Mostly-Good-Metrics/cli.git
+cd cli
+npm install
+npm run build
+npm link   # makes the `mgm` command available on your PATH
 ```
 
 Requires Node.js 18 or newer.
