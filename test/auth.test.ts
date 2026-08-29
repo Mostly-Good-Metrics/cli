@@ -19,8 +19,12 @@ describe("credential storage", () => {
   it("migrates a legacy token into the native credential store and hardens the config file", async () => {
     testConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), "mgm-auth-test-"));
     process.env.XDG_CONFIG_HOME = testConfigDir;
-    const getPassword = vi.fn(() => { throw new Error("not found"); });
-    const setPassword = vi.fn();
+    let storedToken: string | undefined;
+    const getPassword = vi.fn(() => {
+      if (!storedToken) throw new Error("not found");
+      return storedToken;
+    });
+    const setPassword = vi.fn((token: string) => { storedToken = token; });
     const Entry = vi.fn(function () {
       return { getPassword, setPassword, deletePassword: vi.fn() };
     });
@@ -35,7 +39,27 @@ describe("credential storage", () => {
     expect(auth.getToken()).toBe("legacy-token");
     expect(Entry).toHaveBeenCalledWith("com.mostlygoodmetrics.cli", "oauth-token");
     expect(setPassword).toHaveBeenCalledWith("legacy-token");
-    expect(JSON.parse(fs.readFileSync(path.join(configDir, "config.json"), "utf-8"))).not.toHaveProperty("token");
+    expect(JSON.parse(fs.readFileSync(path.join(configDir, "config.json"), "utf-8"))).toMatchObject({ token: "legacy-token" });
     expect(fs.statSync(path.join(configDir, "config.json")).mode & 0o777).toBe(0o600);
+  });
+
+  it("keeps the protected file fallback when a keychain write cannot be read back", async () => {
+    testConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), "mgm-auth-test-"));
+    process.env.XDG_CONFIG_HOME = testConfigDir;
+    const Entry = vi.fn(function () {
+      return {
+        getPassword: () => { throw new Error("not found"); },
+        setPassword: vi.fn(),
+        deletePassword: vi.fn(),
+      };
+    });
+    vi.doMock("@napi-rs/keyring", () => ({ Entry }));
+
+    const auth = await import("../src/auth.js");
+    auth.saveToken("new-token", "josh@example.com");
+
+    const config = JSON.parse(fs.readFileSync(path.join(testConfigDir, "mgm", "config.json"), "utf-8"));
+    expect(config).toMatchObject({ token: "new-token", email: "josh@example.com" });
+    expect(fs.statSync(path.join(testConfigDir, "mgm", "config.json")).mode & 0o777).toBe(0o600);
   });
 });

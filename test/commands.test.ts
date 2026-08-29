@@ -287,6 +287,25 @@ describe("events", () => {
     expect(output()).toContain("purchase");
     expect(output()).toContain("4,321");
   });
+
+  it("define creates event metadata without sending an event", async () => {
+    vi.mocked(client.createEventDefinition).mockResolvedValue({
+      definition: { id: "ed_1", name: "checkout_completed", event_count: 0 },
+    });
+
+    await run(
+      program,
+      "events", "define", "checkout_completed",
+      "--description", "A customer completes checkout",
+      "--project", "p_1",
+    );
+
+    expect(client.createEventDefinition).toHaveBeenCalledWith("p_1", {
+      name: "checkout_completed",
+      description: "A customer completes checkout",
+    });
+    expect(output()).toContain("No analytics event was sent");
+  });
 });
 
 describe("funnels", () => {
@@ -411,7 +430,7 @@ describe("queries", () => {
 
   it("update builds a partial query definition", async () => {
     vi.mocked(client.updateInsight).mockResolvedValue({
-      insight: { id: "q_1", name: "Daily users" },
+      query: { id: "q_1", name: "Daily users" },
     });
 
     await run(program, "queries", "update", "q_1", "--metric", "unique_users", "--range", "30d", "--project", "p_1");
@@ -484,23 +503,25 @@ describe("widgets", () => {
     expect(output()).toContain("large");
   });
 
-  it("add creates a widget with size and position", async () => {
+  it("add creates a query widget", async () => {
     vi.mocked(client.createWidget).mockResolvedValue({
       widget: { id: "w_2", widget_type: "stats" },
     });
 
     await run(
       program,
-      "widgets", "add", "stats",
-      "--size", "small",
-      "--position", "2",
+      "widgets", "add", "query",
+      "--query", "q_1",
+      "--width", "2",
+      "--height", "2",
       "--project", "p_1",
     );
 
     expect(client.createWidget).toHaveBeenCalledWith("p_1", {
-      widget_type: "stats",
-      size: "small",
-      position: 2,
+      widget_type: "query",
+      saved_query_id: "q_1",
+      width: 2,
+      height: 2,
     });
     expect(output()).toContain("w_2");
   });

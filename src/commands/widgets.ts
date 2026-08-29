@@ -45,13 +45,21 @@ export function registerWidgetsCommands(program: Command): void {
     .command("add")
     .description("Add a widget to the dashboard")
     .argument("<type>", "Widget type (e.g. stats, top_events, events_by_day)")
-    .option("--size <size>", "Widget size (e.g. small, medium, large)")
-    .option("--position <n>", "Position on the dashboard")
+    .option("--query <id>", "Saved query ID (required for query widgets)")
+    .option("--stat-type <type>", "Stat type (required for stat widgets)")
+    .option("--title <title>", "Title (for text widgets)")
+    .option("--content <content>", "Content (for text widgets)")
+    .option("--width <n>", "Widget width")
+    .option("--height <n>", "Widget height")
     .option("--project <id>", "Project ID")
     .option("--json", "Output as JSON")
     .action(async (type: string, opts: {
-      size?: string;
-      position?: string;
+      query?: string;
+      statType?: string;
+      title?: string;
+      content?: string;
+      width?: string;
+      height?: string;
       project?: string;
       json?: boolean;
     }) => {
@@ -59,8 +67,12 @@ export function registerWidgetsCommands(program: Command): void {
       const projectId = requireProjectId(opts.project);
 
       const attrs: Record<string, unknown> = { widget_type: type };
-      if (opts.size) attrs.size = opts.size;
-      if (opts.position !== undefined) attrs.position = parseInt(opts.position, 10);
+      if (opts.query) attrs.saved_query_id = opts.query;
+      if (opts.statType) attrs.stat_type = opts.statType;
+      if (opts.title) attrs.title = opts.title;
+      if (opts.content) attrs.content = opts.content;
+      if (opts.width) attrs.width = parseInt(opts.width, 10);
+      if (opts.height) attrs.height = parseInt(opts.height, 10);
 
       const data = await client.createWidget(projectId, attrs);
 

@@ -96,8 +96,10 @@ export function getToken(): string | undefined {
 
   const config = readConfig();
   const legacyToken = config.token;
-  if (legacyToken && saveKeychainToken(legacyToken)) {
-    delete config.token;
+  if (legacyToken) {
+    // Best-effort native-store migration. Retain the protected fallback: a
+    // handful of keychain backends do not survive process boundaries.
+    saveKeychainToken(legacyToken);
     writeConfig(config);
     return legacyToken;
   }
@@ -118,13 +120,12 @@ export function getRedirectUri(): string | undefined {
 
 export function saveToken(token: string, email?: string): void {
   const config = readConfig();
-  if (saveKeychainToken(token)) {
-    delete config.token;
-  } else {
-    // Do not let a stale Keychain value silently override this new login.
-    deleteKeychainToken();
-    config.token = token;
-  }
+  // Keep the mode-0600 file fallback alongside the native credential store.
+  // On some macOS setups a keychain write succeeds within the login process
+  // but is not available to a later CLI invocation. The fallback makes the
+  // successful OAuth session durable in that case.
+  saveKeychainToken(token);
+  config.token = token;
   if (email) config.email = email;
   writeConfig(config);
 }
