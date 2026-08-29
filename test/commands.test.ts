@@ -222,7 +222,7 @@ describe("keys", () => {
   it("revoke deletes the key", async () => {
     vi.mocked(client.revokeApiKey).mockResolvedValue({ status: "ok" });
 
-    await run(program, "keys", "revoke", "k_9", "--project", "p_1");
+    await run(program, "keys", "revoke", "k_9", "--project", "p_1", "--yes");
 
     expect(client.revokeApiKey).toHaveBeenCalledWith("p_1", "k_9");
     expect(output()).toContain("revoked");
@@ -245,6 +245,23 @@ describe("dashboard", () => {
     });
     expect(output()).toContain("1,234");
     expect(output()).toContain("app_open");
+  });
+
+  it("filters retrieves the available dashboard filter values", async () => {
+    vi.mocked(client.getDashboardFilters).mockResolvedValue({
+      event_names: ["app_open"],
+      platforms: ["ios"],
+      environments: ["production"],
+    });
+
+    await run(program, "dashboard", "filters", "--project", "p_1", "--json");
+
+    expect(client.getDashboardFilters).toHaveBeenCalledWith("p_1");
+    expect(JSON.parse(output())).toEqual({
+      event_names: ["app_open"],
+      platforms: ["ios"],
+      environments: ["production"],
+    });
   });
 });
 
@@ -339,6 +356,29 @@ describe("funnels", () => {
     });
     expect(client.executeFunnel).not.toHaveBeenCalled();
   });
+
+  it("show retrieves a saved funnel", async () => {
+    const funnel = { id: "f_1", name: "Checkout", steps: [{ event_name: "purchase" }] };
+    vi.mocked(client.getFunnel).mockResolvedValue({ funnel });
+
+    await run(program, "funnels", "show", "f_1", "--project", "p_1", "--json");
+
+    expect(client.getFunnel).toHaveBeenCalledWith("p_1", "f_1");
+    expect(JSON.parse(output())).toEqual(funnel);
+  });
+
+  it("update sends only the supplied funnel fields", async () => {
+    vi.mocked(client.updateFunnel).mockResolvedValue({
+      funnel: { id: "f_1", name: "Checkout v2", steps: [] },
+    });
+
+    await run(program, "funnels", "update", "f_1", "--name", "Checkout v2", "--window", "14d", "--project", "p_1");
+
+    expect(client.updateFunnel).toHaveBeenCalledWith("p_1", "f_1", {
+      name: "Checkout v2",
+      conversion_window_minutes: 14 * 24 * 60,
+    });
+  });
 });
 
 describe("queries", () => {
@@ -364,9 +404,70 @@ describe("queries", () => {
   it("delete removes a saved query", async () => {
     vi.mocked(client.deleteInsight).mockResolvedValue({ status: "ok" });
 
-    await run(program, "queries", "delete", "q_1", "--project", "p_1");
+    await run(program, "queries", "delete", "q_1", "--project", "p_1", "--yes");
 
     expect(client.deleteInsight).toHaveBeenCalledWith("p_1", "q_1");
+  });
+
+  it("update builds a partial query definition", async () => {
+    vi.mocked(client.updateInsight).mockResolvedValue({
+      insight: { id: "q_1", name: "Daily users" },
+    });
+
+    await run(program, "queries", "update", "q_1", "--metric", "unique_users", "--range", "30d", "--project", "p_1");
+
+    expect(client.updateInsight).toHaveBeenCalledWith("p_1", "q_1", {
+      query_definition: { metric: "unique_users", date_range: "30d" },
+    });
+  });
+});
+
+describe("retention", () => {
+  it("update sends only the supplied retention fields", async () => {
+    vi.mocked(client.updateRetention).mockResolvedValue({
+      retention: {
+        id: "r_1", name: "Weekly", cohort_event: "signup", cohort_grain: "week", retention_days: [1, 7],
+      },
+    });
+
+    await run(program, "retention", "update", "r_1", "--days", "1,7", "--grain", "day", "--project", "p_1");
+
+    expect(client.updateRetention).toHaveBeenCalledWith("p_1", "r_1", {
+      cohort_grain: "day",
+      retention_days: [1, 7],
+    });
+  });
+});
+
+describe("experiments", () => {
+  it("show forwards result-analysis options", async () => {
+    vi.mocked(client.getExperiment).mockResolvedValue({
+      experiment: { id: "e_1", name: "Pricing", variants: ["control", "test"], goal_event: "purchase" },
+      results: { total_enrollments: 20 },
+    });
+
+    await run(program, "experiments", "show", "e_1", "--window-days", "14", "--goal", "upgrade", "--project", "p_1");
+
+    expect(client.getExperiment).toHaveBeenCalledWith("p_1", "e_1", {
+      observation_window_days: "14",
+      goal_event: "upgrade",
+    });
+  });
+
+  it("update and delete cover the experiment lifecycle", async () => {
+    vi.mocked(client.updateExperiment).mockResolvedValue({
+      experiment: { id: "e_1", name: "Pricing", variants: ["control", "test"], goal_event: "purchase" },
+    });
+    vi.mocked(client.deleteExperiment).mockResolvedValue({ status: "ok" });
+
+    await run(program, "experiments", "update", "e_1", "--description", "New copy", "--conversion-window-days", "7", "--project", "p_1");
+    await run(program, "experiments", "delete", "e_1", "--project", "p_1", "--yes");
+
+    expect(client.updateExperiment).toHaveBeenCalledWith("p_1", "e_1", {
+      description: "New copy",
+      conversion_window_days: 7,
+    });
+    expect(client.deleteExperiment).toHaveBeenCalledWith("p_1", "e_1");
   });
 });
 
@@ -407,7 +508,7 @@ describe("widgets", () => {
   it("remove deletes the widget", async () => {
     vi.mocked(client.deleteWidget).mockResolvedValue({ status: "ok" });
 
-    await run(program, "widgets", "remove", "w_1", "--project", "p_1");
+    await run(program, "widgets", "remove", "w_1", "--project", "p_1", "--yes");
 
     expect(client.deleteWidget).toHaveBeenCalledWith("p_1", "w_1");
     expect(output()).toContain("removed");
@@ -421,7 +522,7 @@ describe("widgets", () => {
       ],
     });
 
-    await run(program, "widgets", "reset", "--project", "p_1");
+    await run(program, "widgets", "reset", "--project", "p_1", "--yes");
 
     expect(client.resetWidgets).toHaveBeenCalledWith("p_1");
     expect(output()).toContain("2");
@@ -429,6 +530,33 @@ describe("widgets", () => {
 });
 
 describe("parsing", () => {
+  it("exposes the full command tree as JSON", async () => {
+    await run(program, "commands", "--json");
+
+    const commands = JSON.parse(output()) as { path: string; options: { flags: string }[] }[];
+    expect(commands.some((command) => command.path === "experiments update")).toBe(true);
+    expect(commands.some((command) => command.path === "dashboard filters")).toBe(true);
+  });
+
+  it("returns a structured schema for a command path", async () => {
+    await run(program, "schema", "experiments", "update", "--json");
+
+    const schema = JSON.parse(output()) as { path: string; options: { flags: string }[] };
+    expect(schema.path).toBe("experiments update");
+    expect(schema.options.some((option) => option.flags.includes("--conversion-window-days"))).toBe(true);
+  });
+
+  it("requires --yes for destructive commands in non-interactive mode", async () => {
+    await expect(run(program, "queries", "delete", "q_1", "--project", "p_1", "--no-input"))
+      .rejects.toThrow("requires --yes");
+    expect(client.deleteInsight).not.toHaveBeenCalled();
+  });
+
+  it("rejects browser login in no-input mode without a token", async () => {
+    await expect(run(program, "login", "--no-input"))
+      .rejects.toThrow("requires --token");
+  });
+
   it("rejects unknown commands", async () => {
     const err = await run(program, "definitely-not-a-command").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(Error);

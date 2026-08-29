@@ -82,7 +82,8 @@ export function registerEventsCommands(program: Command): void {
     .description("Send a test event")
     .argument("<event>", "Event JSON (e.g. '{\"name\":\"test\"}')")
     .option("--project <id>", "Project ID")
-    .action(async (eventJson: string, opts: { project?: string }) => {
+    .option("--json", "Output as JSON")
+    .action(async (eventJson: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
 
@@ -110,6 +111,10 @@ export function registerEventsCommands(program: Command): void {
         process.exit(1);
       }
 
+      if (opts.json) {
+        output.json({ status: "sent", event });
+        return;
+      }
       console.log("Event sent.");
     });
 }

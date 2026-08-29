@@ -39,6 +39,7 @@ export function saveContext(projectId: string, orgSlug: string): void {
 
 export function requireProjectId(projectFlag?: string): string {
   if (projectFlag) return projectFlag;
+  if (process.env.MGM_PROJECT_ID) return process.env.MGM_PROJECT_ID;
   const ctx = loadContext();
   if (ctx?.project_id) return ctx.project_id;
   console.error("No project context. Run `mgm init` or pass --project <id>.");

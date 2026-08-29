@@ -25,6 +25,28 @@ mgm dashboard --range 30d
 
 Most project-scoped commands read the project from `.mgm.json` (created by `mgm init`) or accept an explicit `--project <id>`. Add `--json` to any read command for machine-readable output.
 
+## Automation and agents
+
+The CLI is designed to be safely discoverable from a script or coding agent:
+
+```bash
+# Discover the complete command tree and each command's flags
+mgm commands --json
+mgm schema experiments update --json
+
+# Emit JSON and filter it with jq
+mgm commands --json --jq '.[] | select(.path == "experiments update")'
+
+# Avoid browser/prompt flows in CI
+MGM_TOKEN="..." MGM_PROJECT_ID="prj_123" mgm experiments list --json
+mgm init --project "My App" --org acme --no-input --json
+
+# Explicitly confirm irreversible operations in scripts
+mgm experiments delete exp_123 --project prj_123 --no-input --yes --json
+```
+
+`--no-input` makes commands that would otherwise prompt fail with a usage error. Deletions, key revocations, dashboard-widget resets, and stopping an experiment require confirmation; in non-interactive environments, pass `--yes` explicitly. `--jq` requires the standard `jq` executable.
+
 ## Commands
 
 | Command | Description |
@@ -35,13 +57,14 @@ Most project-scoped commands read the project from `.mgm.json` (created by `mgm 
 | `mgm orgs list\|show\|create\|invite` | Manage organizations and members |
 | `mgm projects list\|create\|show` | Manage projects |
 | `mgm keys list\|create\|revoke` | Manage project API keys |
-| `mgm dashboard` | Dashboard stats with filters (`--range`, `--platform`, ...) |
+| `mgm dashboard` / `mgm dashboard filters` | Dashboard stats and available filter values |
 | `mgm events list\|types\|send` | Inspect recent events, send test events |
-| `mgm funnels list\|create\|execute\|delete` | Saved and ad-hoc funnels |
-| `mgm retention list\|create\|execute\|delete` | Retention analyses |
-| `mgm queries list\|create\|execute\|delete` | Saved and ad-hoc queries |
-| `mgm experiments ...` | Manage and start/stop experiments |
+| `mgm funnels list\|create\|show\|update\|execute\|delete` | Saved and ad-hoc funnels |
+| `mgm retention list\|create\|show\|update\|execute\|delete` | Retention analyses |
+| `mgm queries list\|create\|show\|update\|execute\|delete` | Saved and ad-hoc queries |
+| `mgm experiments list\|create\|show\|update\|start\|stop\|delete` | Manage and analyze A/B experiments |
 | `mgm widgets list\|add\|remove\|reset` | Manage dashboard widgets |
+| `mgm commands` / `mgm schema <command>` | Discover the full command tree and typed flags |
 
 Run `mgm <command> --help` for full options.
 

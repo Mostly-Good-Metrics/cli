@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { execFileSync } from "node:child_process";
 
 function getConfigDir(): string {
   const platform = process.platform;
@@ -13,6 +14,8 @@ function getConfigDir(): string {
 
 const CONFIG_DIR = getConfigDir();
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
+const KEYCHAIN_SERVICE = "com.mostlygoodmetrics.cli";
+const KEYCHAIN_ACCOUNT = "oauth-token";
 
 // Migrate from legacy ~/.mgm/config.json if it exists
 const LEGACY_CONFIG = path.join(os.homedir(), ".mgm", "config.json");
@@ -42,13 +45,70 @@ function readConfig(): Config {
 
 function writeConfig(config: Config): void {
   fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", {
+  const temporaryFile = `${CONFIG_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(temporaryFile, JSON.stringify(config, null, 2) + "\n", {
     mode: 0o600,
   });
+  fs.chmodSync(temporaryFile, 0o600);
+  fs.renameSync(temporaryFile, CONFIG_FILE);
+  // chmod is required for existing files, where writeFile's mode is ignored.
+  fs.chmodSync(CONFIG_FILE, 0o600);
+}
+
+function readKeychainToken(): string | undefined {
+  if (process.platform !== "darwin") return undefined;
+  try {
+    const token = execFileSync(
+      "/usr/bin/security",
+      ["find-generic-password", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE, "-w"],
+      { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    return token || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveKeychainToken(token: string): boolean {
+  if (process.platform !== "darwin") return false;
+  try {
+    execFileSync(
+      "/usr/bin/security",
+      ["add-generic-password", "-U", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE, "-w", token],
+      { stdio: "ignore" },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function deleteKeychainToken(): void {
+  if (process.platform !== "darwin") return;
+  try {
+    execFileSync(
+      "/usr/bin/security",
+      ["delete-generic-password", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE],
+      { stdio: "ignore" },
+    );
+  } catch {
+    // The key may not exist yet; removing local fallback state still logs out.
+  }
 }
 
 export function getToken(): string | undefined {
-  return readConfig().token;
+  if (process.env.MGM_TOKEN) return process.env.MGM_TOKEN;
+  const keychainToken = readKeychainToken();
+  if (keychainToken) return keychainToken;
+
+  const config = readConfig();
+  const legacyToken = config.token;
+  if (legacyToken && saveKeychainToken(legacyToken)) {
+    delete config.token;
+    writeConfig(config);
+    return legacyToken;
+  }
+  return legacyToken;
 }
 
 export function getEmail(): string | undefined {
@@ -65,7 +125,11 @@ export function getRedirectUri(): string | undefined {
 
 export function saveToken(token: string, email?: string): void {
   const config = readConfig();
-  config.token = token;
+  if (saveKeychainToken(token)) {
+    delete config.token;
+  } else {
+    config.token = token;
+  }
   if (email) config.email = email;
   writeConfig(config);
 }
@@ -79,6 +143,7 @@ export function saveClientId(clientId: string, redirectUri?: string): void {
 
 export function clearToken(): void {
   const config = readConfig();
+  deleteKeychainToken();
   delete config.token;
   delete config.email;
   writeConfig(config);
