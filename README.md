@@ -104,12 +104,12 @@ CI (build + tests on Node 20 and 22) runs on every PR via GitHub Actions.
 
 ## Releasing
 
-Publishing is automated by `.github/workflows/release.yml`, which runs on version tags and publishes to npm **only if the `NPM_TOKEN` repository secret is set**.
+Publishing is automated by `.github/workflows/release.yml`, which runs on version tags and publishes to npm through npm trusted publishing (GitHub Actions OIDC). It does not use an npm access-token secret.
 
 One-time setup:
 
-1. Create an npm automation token with publish access to the `@mostly-good-metrics` scope (the org must exist on npm).
-2. Add it as the `NPM_TOKEN` secret in the GitHub repo (Settings > Secrets and variables > Actions).
+1. In the npm package's **Trusted Publisher** settings, configure GitHub Actions for `Mostly-Good-Metrics/cli` and workflow `release.yml`, with **npm publish** allowed.
+2. Keep the `id-token: write` permission in the release workflow; npm uses it to issue a short-lived publish credential.
 
 To ship a release:
 
@@ -119,7 +119,7 @@ git tag v0.1.0
 git push --tags
 ```
 
-The workflow installs, builds, tests, and runs `npm publish --access public`. If `NPM_TOKEN` is missing it skips the publish step with a warning instead of failing.
+The workflow installs, builds, tests, and runs `npm publish --access public`. npm generates provenance automatically for trusted-publisher releases.
 
 ## License
 
