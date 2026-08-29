@@ -89,7 +89,13 @@ export function registerRetentionCommands(program: Command): void {
     .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const data = await client.getRetention(requireProjectId(opts.project), id);
-      output.json(data.retention);
+      if (opts.json) {
+        output.json(data.retention);
+        return;
+      }
+      console.log(`Retention: ${data.retention.name}`);
+      console.log(`Cohort event: ${data.retention.cohort_event}`);
+      console.log(`Days: ${data.retention.retention_days.join(", ")}`);
     });
 
   retention
@@ -114,11 +120,18 @@ export function registerRetentionCommands(program: Command): void {
       if (opts.cohortEvent) attrs.cohort_event = opts.cohortEvent;
       if (opts.retentionEvent) attrs.retention_event = opts.retentionEvent;
       if (opts.grain) attrs.cohort_grain = opts.grain;
-      if (opts.days) attrs.retention_days = opts.days.split(",").map((day) => parseInt(day.trim()));
+      if (opts.days) {
+        if (!/^\d+(,\d+)*$/.test(opts.days)) throw new Error("--days must be comma-separated whole numbers.");
+        attrs.retention_days = opts.days.split(",").map((day) => parseInt(day, 10));
+      }
       if (opts.range) attrs.date_range = opts.range;
       if (Object.keys(attrs).length === 0) throw new Error("Provide at least one field to update.");
       const data = await client.updateRetention(requireProjectId(opts.project), id, attrs);
-      output.json(data.retention);
+      if (opts.json) {
+        output.json(data.retention);
+        return;
+      }
+      console.log(`Retention analysis updated: ${data.retention.name}`);
     });
 
   retention
@@ -160,13 +173,11 @@ export function registerRetentionCommands(program: Command): void {
     .description("Delete a retention analysis")
     .argument("<id>", "Retention ID")
     .option("--project <id>", "Project ID")
-    .option("-y, --yes", "Confirm deletion")
-    .option("--no-input", "Fail rather than prompt for confirmation")
     .option("--json", "Output as JSON")
-    .action(async (id: string, opts: { project?: string; yes?: boolean; input?: boolean; json?: boolean }) => {
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await requireConfirmation(opts, `Delete retention analysis ${id}`);
+      await requireConfirmation(`Delete retention analysis ${id}`);
       const data = await client.deleteRetention(projectId, id);
       if (opts.json) {
         output.json(data);

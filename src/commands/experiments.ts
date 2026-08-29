@@ -91,7 +91,13 @@ export function registerExperimentsCommands(program: Command): void {
       if (opts.windowDays) params.observation_window_days = opts.windowDays;
       if (opts.goal) params.goal_event = opts.goal;
       const data = await client.getExperiment(requireProjectId(opts.project), id, params);
-      output.json(opts.json ? data : data);
+      if (opts.json) {
+        output.json(data);
+        return;
+      }
+      console.log(`Experiment: ${data.experiment.name}`);
+      console.log(`Status: ${data.experiment.status ?? "-"}`);
+      console.log(`Goal: ${data.experiment.goal_event}`);
     });
 
   experiments
@@ -115,10 +121,19 @@ export function registerExperimentsCommands(program: Command): void {
       if (opts.description) attrs.description = opts.description;
       if (opts.variants) attrs.variants = opts.variants.split(",").map((variant) => variant.trim());
       if (opts.goal) attrs.goal_event = opts.goal;
-      if (opts.conversionWindowDays) attrs.conversion_window_days = parseInt(opts.conversionWindowDays);
+      if (opts.conversionWindowDays) {
+        if (!/^[1-9]\d*$/.test(opts.conversionWindowDays)) {
+          throw new Error("--conversion-window-days must be a positive whole number.");
+        }
+        attrs.conversion_window_days = parseInt(opts.conversionWindowDays, 10);
+      }
       if (Object.keys(attrs).length === 0) throw new Error("Provide at least one field to update.");
       const data = await client.updateExperiment(requireProjectId(opts.project), id, attrs);
-      output.json(data.experiment);
+      if (opts.json) {
+        output.json(data.experiment);
+        return;
+      }
+      console.log(`Experiment updated: ${data.experiment.name}`);
     });
 
   experiments
@@ -132,7 +147,7 @@ export function registerExperimentsCommands(program: Command): void {
       const projectId = requireProjectId(opts.project);
       const data = await client.startExperiment(projectId, id);
       if (opts.json) {
-        output.json(data.experiment);
+        output.json(data);
         return;
       }
       console.log("Experiment started.");
@@ -143,13 +158,11 @@ export function registerExperimentsCommands(program: Command): void {
     .description("Stop an experiment")
     .argument("<id>", "Experiment ID")
     .option("--project <id>", "Project ID")
-    .option("-y, --yes", "Confirm stopping the experiment")
-    .option("--no-input", "Fail rather than prompt for confirmation")
     .option("--json", "Output as JSON")
-    .action(async (id: string, opts: { project?: string; yes?: boolean; input?: boolean; json?: boolean }) => {
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await requireConfirmation(opts, `Stop experiment ${id}`);
+      await requireConfirmation(`Stop experiment ${id}`);
       const data = await client.stopExperiment(projectId, id);
       if (opts.json) {
         output.json(data.experiment);
@@ -180,8 +193,7 @@ export function registerExperimentsCommands(program: Command): void {
       console.log(`Goal: ${exp.goal_event}`);
       console.log(`Variants: ${exp.variants.join(", ")}`);
       console.log();
-      // Full results would come from the API response
-      output.json(data);
+      output.json(data.results ?? data.experiment);
     });
 
   experiments
@@ -189,12 +201,10 @@ export function registerExperimentsCommands(program: Command): void {
     .description("Delete an experiment")
     .argument("<id>", "Experiment ID")
     .option("--project <id>", "Project ID")
-    .option("-y, --yes", "Confirm deletion")
-    .option("--no-input", "Fail rather than prompt for confirmation")
     .option("--json", "Output as JSON")
-    .action(async (id: string, opts: { project?: string; yes?: boolean; input?: boolean; json?: boolean }) => {
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
-      await requireConfirmation(opts, `Delete experiment ${id}`);
+      await requireConfirmation(`Delete experiment ${id}`);
       const data = await client.deleteExperiment(requireProjectId(opts.project), id);
       if (opts.json) {
         output.json(data);

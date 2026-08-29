@@ -44,12 +44,8 @@ export function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 1) + "\u2026" : s;
 }
 import { spawnSync } from "node:child_process";
+import { getRuntimeOptions } from "./runtime.js";
 
 function jqExpression(): string | undefined {
-  const args = process.argv;
-  for (let index = 0; index < args.length; index += 1) {
-    if (args[index] === "--jq") return args[index + 1];
-    if (args[index].startsWith("--jq=")) return args[index].slice("--jq=".length);
-  }
-  return undefined;
+  return getRuntimeOptions().jq;
 }

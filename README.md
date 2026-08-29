@@ -39,6 +39,7 @@ mgm commands --json --jq '.[] | select(.path == "experiments update")'
 
 # Avoid browser/prompt flows in CI
 MGM_TOKEN="..." MGM_PROJECT_ID="prj_123" mgm experiments list --json
+# Set MGM_API_URL alongside MGM_APP_URL for a local API/OAuth development environment.
 mgm init --project "My App" --org acme --no-input --json
 
 # Explicitly confirm irreversible operations in scripts

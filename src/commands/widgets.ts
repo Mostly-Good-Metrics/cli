@@ -78,13 +78,11 @@ export function registerWidgetsCommands(program: Command): void {
     .description("Remove a widget from the dashboard")
     .argument("<id>", "Widget ID")
     .option("--project <id>", "Project ID")
-    .option("-y, --yes", "Confirm removal")
-    .option("--no-input", "Fail rather than prompt for confirmation")
     .option("--json", "Output as JSON")
-    .action(async (id: string, opts: { project?: string; yes?: boolean; input?: boolean; json?: boolean }) => {
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await requireConfirmation(opts, `Remove widget ${id}`);
+      await requireConfirmation(`Remove widget ${id}`);
       const data = await client.deleteWidget(projectId, id);
       if (opts.json) {
         output.json(data);
@@ -97,13 +95,11 @@ export function registerWidgetsCommands(program: Command): void {
     .command("reset")
     .description("Reset dashboard widgets to defaults")
     .option("--project <id>", "Project ID")
-    .option("-y, --yes", "Confirm reset")
-    .option("--no-input", "Fail rather than prompt for confirmation")
     .option("--json", "Output as JSON")
-    .action(async (opts: { project?: string; yes?: boolean; input?: boolean; json?: boolean }) => {
+    .action(async (opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await requireConfirmation(opts, "Reset dashboard widgets to defaults");
+      await requireConfirmation("Reset dashboard widgets to defaults");
       const data = await client.resetWidgets(projectId);
 
       if (opts.json) {

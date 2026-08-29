@@ -1,6 +1,6 @@
 import { getToken } from "./auth.js";
 
-const BASE_URL = "https://api.mostlygoodmetrics.com/api/v2";
+const BASE_URL = process.env.MGM_API_URL ?? "https://api.mostlygoodmetrics.com/api/v2";
 
 export class ApiError extends Error {
   constructor(

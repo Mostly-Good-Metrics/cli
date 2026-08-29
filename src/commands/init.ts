@@ -3,7 +3,7 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import { saveContext } from "../context.js";
 import readline from "node:readline";
-import { CliUsageError } from "../runtime.js";
+import { CliUsageError, isNoInput } from "../runtime.js";
 
 function prompt(question: string): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -23,8 +23,7 @@ export function registerInitCommand(program: Command): void {
     .option("--org <slug>", "Organization slug")
     .option("--sdk <type>", "SDK type (js, react-native, swift, android, flutter)")
     .option("--json", "Output as JSON")
-    .option("--no-input", "Fail rather than prompt for missing values")
-    .action(async (opts: { project?: string; org?: string; sdk?: string; json?: boolean; input?: boolean }) => {
+    .action(async (opts: { project?: string; org?: string; sdk?: string; json?: boolean }) => {
       auth.requireToken();
 
       const { user, organizations } = await client.getMe();
@@ -38,7 +37,7 @@ export function registerInitCommand(program: Command): void {
         if (organizations.length === 1) {
           orgSlug = organizations[0].slug;
         } else {
-          if (opts.input === false) {
+          if (isNoInput()) {
             throw new CliUsageError("init requires --org when --no-input is set and multiple organizations are available.");
           }
           console.log("Organizations:");
@@ -49,7 +48,7 @@ export function registerInitCommand(program: Command): void {
         }
       }
 
-      if (opts.input === false && !opts.project) {
+      if (isNoInput() && !opts.project) {
         throw new CliUsageError("init requires --project when --no-input is set.");
       }
       const projectName = opts.project ?? (await prompt("Project name: "));
@@ -58,10 +57,10 @@ export function registerInitCommand(program: Command): void {
         process.exit(1);
       }
 
-      console.log(`Creating project "${projectName}" in ${orgSlug}...`);
+      if (!opts.json) console.log(`Creating project "${projectName}" in ${orgSlug}...`);
       const { project } = await client.createProject(orgSlug, projectName);
 
-      console.log("Creating API key...");
+      if (!opts.json) console.log("Creating API key...");
       const { api_key } = await client.createApiKey(project.id, "Development");
 
       saveContext(project.id, orgSlug);

@@ -20,7 +20,21 @@ interface CommandSchema {
 }
 
 function schemaFor(command: Command, path: string[], root?: Command): CommandSchema {
-  const inheritedOptions = root && command !== root ? root.options : [];
+  const effectiveOptions = (): typeof command.options => {
+    const commands: Command[] = [];
+    let current: Command | null = command;
+    while (current) {
+      commands.unshift(current);
+      if (current === root) break;
+      current = current.parent;
+    }
+    const seen = new Set<string>();
+    return commands.flatMap((item) => item.options).filter((option) => {
+      if (seen.has(option.flags)) return false;
+      seen.add(option.flags);
+      return true;
+    });
+  };
   return {
     path: path.join(" "),
     description: command.description(),
@@ -30,7 +44,7 @@ function schemaFor(command: Command, path: string[], root?: Command): CommandSch
       required: arg.required,
       variadic: arg.variadic,
     })),
-    options: [...inheritedOptions, ...command.options].map((option) => ({
+    options: effectiveOptions().map((option) => ({
       flags: option.flags,
       description: option.description,
       required: option.mandatory,

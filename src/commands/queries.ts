@@ -89,7 +89,12 @@ export function registerQueriesCommands(program: Command): void {
     .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const data = await client.getInsight(requireProjectId(opts.project), id);
-      output.json(data.insight);
+      if (opts.json) {
+        output.json(data.insight);
+        return;
+      }
+      console.log(`Query: ${data.insight.name}`);
+      console.log(`ID: ${data.insight.id}`);
     });
 
   queries
@@ -118,7 +123,11 @@ export function registerQueriesCommands(program: Command): void {
       if (opts.visualization) attrs.visualization = opts.visualization;
       if (Object.keys(attrs).length === 0) throw new Error("Provide at least one field to update.");
       const data = await client.updateInsight(requireProjectId(opts.project), id, attrs);
-      output.json(data.insight);
+      if (opts.json) {
+        output.json(data.insight);
+        return;
+      }
+      console.log(`Query updated: ${data.insight.name}`);
     });
 
   queries
@@ -183,13 +192,11 @@ export function registerQueriesCommands(program: Command): void {
     .description("Delete a saved query")
     .argument("<id>", "Query ID")
     .option("--project <id>", "Project ID")
-    .option("-y, --yes", "Confirm deletion")
-    .option("--no-input", "Fail rather than prompt for confirmation")
     .option("--json", "Output as JSON")
-    .action(async (id: string, opts: { project?: string; yes?: boolean; input?: boolean; json?: boolean }) => {
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await requireConfirmation(opts, `Delete query ${id}`);
+      await requireConfirmation(`Delete query ${id}`);
       const data = await client.deleteInsight(projectId, id);
       if (opts.json) {
         output.json(data);

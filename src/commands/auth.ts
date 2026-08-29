@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
-import { CliUsageError } from "../runtime.js";
+import { CliUsageError, isNoInput } from "../runtime.js";
 
 const CLIENT_NAME = "MostlyGoodMetrics CLI";
 
@@ -253,8 +253,7 @@ export function registerAuthCommands(program: Command): void {
     .command("login")
     .description("Log in via browser (opens authorization page)")
     .option("--token <token>", "Use an existing session token directly")
-    .option("--no-input", "Fail rather than open a browser")
-    .action(async (opts: { token?: string; input?: boolean }) => {
+    .action(async (opts: { token?: string }) => {
       if (opts.token) {
         // Direct token login (for CI, scripts, etc.)
         auth.saveToken(opts.token);
@@ -268,7 +267,7 @@ export function registerAuthCommands(program: Command): void {
         return;
       }
 
-      if (opts.input === false) {
+      if (isNoInput()) {
         throw new CliUsageError("login requires --token when --no-input is set.");
       }
 
@@ -278,9 +277,8 @@ export function registerAuthCommands(program: Command): void {
   program
     .command("signup")
     .description("Create a new MostlyGoodMetrics account (opens browser)")
-    .option("--no-input", "Fail rather than open a browser")
-    .action(async (opts: { input?: boolean }) => {
-      if (opts.input === false) {
+    .action(async () => {
+      if (isNoInput()) {
         throw new CliUsageError("signup cannot run with --no-input. Create an account in the browser first.");
       }
       await browserLogin({ signup: true });

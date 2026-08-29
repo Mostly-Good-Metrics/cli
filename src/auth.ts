@@ -23,6 +23,7 @@ try {
   if (fs.existsSync(LEGACY_CONFIG) && !fs.existsSync(CONFIG_FILE)) {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
     fs.copyFileSync(LEGACY_CONFIG, CONFIG_FILE);
+    fs.chmodSync(CONFIG_FILE, 0o600);
     fs.unlinkSync(LEGACY_CONFIG);
     try { fs.rmdirSync(path.dirname(LEGACY_CONFIG)); } catch {}
   }
@@ -37,7 +38,10 @@ interface Config {
 
 function readConfig(): Config {
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8")) as Config;
+    // Ensure legacy/file-fallback credentials are never left world-readable.
+    try { fs.chmodSync(CONFIG_FILE, 0o600); } catch {}
+    return config;
   } catch {
     return {};
   }
@@ -128,6 +132,8 @@ export function saveToken(token: string, email?: string): void {
   if (saveKeychainToken(token)) {
     delete config.token;
   } else {
+    // Do not let a stale Keychain value silently override this new login.
+    deleteKeychainToken();
     config.token = token;
   }
   if (email) config.email = email;

@@ -98,7 +98,13 @@ export function registerFunnelsCommands(program: Command): void {
     .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const data = await client.getFunnel(requireProjectId(opts.project), id);
-      output.json(opts.json ? data.funnel : data.funnel);
+      if (opts.json) {
+        output.json(data.funnel);
+        return;
+      }
+      console.log(`Funnel: ${data.funnel.name}`);
+      console.log(`ID: ${data.funnel.id}`);
+      console.log(`Steps: ${data.funnel.steps.map((step) => step.event_name).join(" -> ")}`);
     });
 
   funnels
@@ -126,7 +132,11 @@ export function registerFunnelsCommands(program: Command): void {
       if (opts.range) attrs.date_range = opts.range;
       if (Object.keys(attrs).length === 0) throw new Error("Provide at least one field to update.");
       const data = await client.updateFunnel(requireProjectId(opts.project), id, attrs);
-      output.json(data.funnel);
+      if (opts.json) {
+        output.json(data.funnel);
+        return;
+      }
+      console.log(`Funnel updated: ${data.funnel.name}`);
     });
 
   funnels
@@ -195,13 +205,11 @@ export function registerFunnelsCommands(program: Command): void {
     .description("Delete a funnel")
     .argument("<id>", "Funnel ID")
     .option("--project <id>", "Project ID")
-    .option("-y, --yes", "Confirm deletion")
-    .option("--no-input", "Fail rather than prompt for confirmation")
     .option("--json", "Output as JSON")
-    .action(async (id: string, opts: { project?: string; yes?: boolean; input?: boolean; json?: boolean }) => {
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await requireConfirmation(opts, `Delete funnel ${id}`);
+      await requireConfirmation(`Delete funnel ${id}`);
       const data = await client.deleteFunnel(projectId, id);
       if (opts.json) {
         output.json(data);

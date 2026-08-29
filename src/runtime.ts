@@ -7,12 +7,29 @@ export class CliUsageError extends Error {
   }
 }
 
-export async function requireConfirmation(
-  opts: { yes?: boolean; input?: boolean },
-  action: string,
-): Promise<void> {
-  if (opts.yes) return;
-  if (opts.input === false || !process.stdin.isTTY) {
+interface RuntimeOptions {
+  input?: boolean;
+  jq?: string;
+  yes?: boolean;
+}
+
+let runtimeOptions: RuntimeOptions = {};
+
+export function configureRuntimeOptions(options: RuntimeOptions): void {
+  runtimeOptions = options;
+}
+
+export function getRuntimeOptions(): Readonly<RuntimeOptions> {
+  return runtimeOptions;
+}
+
+export function isNoInput(): boolean {
+  return runtimeOptions.input === false;
+}
+
+export async function requireConfirmation(action: string): Promise<void> {
+  if (runtimeOptions.yes) return;
+  if (isNoInput() || !process.stdin.isTTY) {
     throw new CliUsageError(`${action} requires --yes when running without interactive input.`);
   }
 

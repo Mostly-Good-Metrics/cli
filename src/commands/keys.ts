@@ -68,13 +68,11 @@ export function registerKeysCommands(program: Command): void {
     .description("Revoke an API key")
     .argument("<id>", "Key ID")
     .option("--project <id>", "Project ID")
-    .option("-y, --yes", "Confirm revocation")
-    .option("--no-input", "Fail rather than prompt for confirmation")
     .option("--json", "Output as JSON")
-    .action(async (id: string, opts: { project?: string; yes?: boolean; input?: boolean; json?: boolean }) => {
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await requireConfirmation(opts, `Revoke API key ${id}`);
+      await requireConfirmation(`Revoke API key ${id}`);
       const data = await client.revokeApiKey(projectId, id);
       if (opts.json) {
         output.json(data);
