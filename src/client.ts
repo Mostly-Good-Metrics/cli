@@ -129,20 +129,23 @@ export const listEventTypes = (projectId: string, params?: Record<string, string
   request<{ event_types: EventType[] }>("GET", `/projects/${projectId}/events/types`, { params });
 
 export const listEventDefinitions = (projectId: string) =>
-  request<{ event_definitions: EventDefinition[] }>("GET", `/projects/${projectId}/events/definitions`);
+  request<{ definitions: EventDefinition[] }>("GET", `/projects/${projectId}/events/definitions`);
+
+export const createEventDefinition = (projectId: string, attrs: Record<string, unknown>) =>
+  request<{ definition: EventDefinition }>("POST", `/projects/${projectId}/events/definitions`, { body: attrs });
 
 // Insights (Saved Queries)
 export const listInsights = (projectId: string) =>
-  request<{ insights: SavedQuery[] }>("GET", `/projects/${projectId}/insights`);
+  request<{ queries: SavedQuery[] }>("GET", `/projects/${projectId}/insights`);
 
 export const getInsight = (projectId: string, id: string) =>
-  request<{ insight: SavedQuery }>("GET", `/projects/${projectId}/insights/${id}`);
+  request<{ query: SavedQuery }>("GET", `/projects/${projectId}/insights/${id}`);
 
 export const createInsight = (projectId: string, attrs: Record<string, unknown>) =>
-  request<{ insight: SavedQuery }>("POST", `/projects/${projectId}/insights`, { body: attrs });
+  request<{ query: SavedQuery }>("POST", `/projects/${projectId}/insights`, { body: attrs });
 
 export const updateInsight = (projectId: string, id: string, attrs: Record<string, unknown>) =>
-  request<{ insight: SavedQuery }>("PATCH", `/projects/${projectId}/insights/${id}`, { body: attrs });
+  request<{ query: SavedQuery }>("PATCH", `/projects/${projectId}/insights/${id}`, { body: attrs });
 
 export const deleteInsight = (projectId: string, id: string) =>
   request<{ status: string }>("DELETE", `/projects/${projectId}/insights/${id}`);
@@ -304,6 +307,8 @@ export interface EventDefinition {
   id: string;
   name: string;
   description?: string;
+  event_count?: number;
+  first_seen_at?: string | null;
 }
 
 export interface SavedQuery {

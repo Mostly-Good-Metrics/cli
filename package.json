@@ -1,6 +1,6 @@
 {
   "name": "@mostly-good-metrics/cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "CLI for MostlyGoodMetrics analytics",
   "type": "module",
   "bin": {

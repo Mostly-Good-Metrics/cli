@@ -21,18 +21,18 @@ export function registerQueriesCommands(program: Command): void {
       const data = await client.listInsights(projectId);
 
       if (opts.json) {
-        output.json(data.insights);
+        output.json(data.queries);
         return;
       }
 
-      if (data.insights.length === 0) {
+      if (data.queries.length === 0) {
         console.log("No saved queries found.");
         return;
       }
 
       output.table(
         ["ID", "Name", "Visualization"],
-        data.insights.map((q) => [q.id, q.name, q.visualization ?? "-"]),
+        data.queries.map((q) => [q.id, q.name, q.visualization ?? "-"]),
       );
     });
 
@@ -42,6 +42,7 @@ export function registerQueriesCommands(program: Command): void {
     .requiredOption("--name <name>", "Query name")
     .option("--metric <metric>", "Metric (e.g. unique_users, count_events)")
     .option("--group-by <field>", "Group by field (e.g. date, event_name)")
+    .option("--events <names>", "Comma-separated event names to include")
     .option("--range <range>", "Date range (e.g. 30d)")
     .option("--visualization <type>", "Chart type (line, bar, table)")
     .option("--project <id>", "Project ID")
@@ -50,6 +51,7 @@ export function registerQueriesCommands(program: Command): void {
       name: string;
       metric?: string;
       groupBy?: string;
+      events?: string;
       range?: string;
       visualization?: string;
       project?: string;
@@ -62,6 +64,7 @@ export function registerQueriesCommands(program: Command): void {
       if (opts.metric) queryDef.metric = opts.metric;
       if (opts.groupBy) queryDef.group_by = opts.groupBy;
       if (opts.range) queryDef.date_range = opts.range;
+      if (opts.events) queryDef.filters = { event_names: opts.events.split(",").map((name) => name.trim()).filter(Boolean) };
 
       const attrs: Record<string, unknown> = {
         name: opts.name,
@@ -72,12 +75,12 @@ export function registerQueriesCommands(program: Command): void {
       const data = await client.createInsight(projectId, attrs);
 
       if (opts.json) {
-        output.json(data.insight);
+        output.json(data.query);
         return;
       }
 
-      console.log(`Query created: ${data.insight.name}`);
-      console.log(`ID: ${data.insight.id}`);
+      console.log(`Query created: ${data.query.name}`);
+      console.log(`ID: ${data.query.id}`);
     });
 
   queries
@@ -90,11 +93,11 @@ export function registerQueriesCommands(program: Command): void {
       auth.requireToken();
       const data = await client.getInsight(requireProjectId(opts.project), id);
       if (opts.json) {
-        output.json(data.insight);
+        output.json(data.query);
         return;
       }
-      console.log(`Query: ${data.insight.name}`);
-      console.log(`ID: ${data.insight.id}`);
+      console.log(`Query: ${data.query.name}`);
+      console.log(`ID: ${data.query.id}`);
     });
 
   queries
@@ -124,10 +127,10 @@ export function registerQueriesCommands(program: Command): void {
       if (Object.keys(attrs).length === 0) throw new Error("Provide at least one field to update.");
       const data = await client.updateInsight(requireProjectId(opts.project), id, attrs);
       if (opts.json) {
-        output.json(data.insight);
+        output.json(data.query);
         return;
       }
-      console.log(`Query updated: ${data.insight.name}`);
+      console.log(`Query updated: ${data.query?.name ?? id}`);
     });
 
   queries

@@ -42,6 +42,12 @@ mgm dashboard --project prj_123 --range 7d
 mgm events types --project prj_123
 mgm events list --project prj_123 --range 7d
 
+# Define an event before it is first sent, so it is ready for funnels and dashboards.
+# This creates metadata only; it does not emit an analytics event.
+mgm events define checkout_completed \
+  --description "A customer completes checkout" \
+  --project prj_123
+
 # Run an ad-hoc funnel.
 mgm funnels execute \
   --steps "app_open,add_to_cart,purchase" \

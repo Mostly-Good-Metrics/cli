@@ -78,6 +78,30 @@ export function registerEventsCommands(program: Command): void {
     });
 
   events
+    .command("define")
+    .description("Define an event before it is observed")
+    .argument("<name>", "Event name (e.g. checkout_completed)")
+    .option("--description <text>", "Optional event description")
+    .option("--project <id>", "Project ID")
+    .option("--json", "Output as JSON")
+    .action(async (name: string, opts: { description?: string; project?: string; json?: boolean }) => {
+      auth.requireToken();
+      const projectId = requireProjectId(opts.project);
+      const data = await client.createEventDefinition(projectId, {
+        name,
+        ...(opts.description ? { description: opts.description } : {}),
+      });
+
+      if (opts.json) {
+        output.json(data.definition);
+        return;
+      }
+
+      console.log(`Event defined: ${data.definition.name}`);
+      console.log("No analytics event was sent; it will populate after first ingestion.");
+    });
+
+  events
     .command("send")
     .description("Send a test event")
     .argument("<event>", "Event JSON (e.g. '{\"name\":\"test\"}')")
