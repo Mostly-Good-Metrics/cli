@@ -115,6 +115,24 @@ MGM_TOKEN="…" MGM_PROJECT_ID="prj_123" mgm experiments list --json
 mgm experiments delete exp_123 --project prj_123 --no-input --yes --json
 ```
 
+## Agent skills
+
+MGM ships skills for instrumentation, metric analysis, funnel diagnosis, and weekly reviews. The CLI uses the standard npm-delivered [`skills`](https://skills.sh) installer, so the same command works for Codex, Claude Code, and other supported agents.
+
+```bash
+# See the four available MGM skills.
+mgm skills list
+
+# Install interactively in the current project.
+mgm skills install
+
+# Install all MGM skills globally for Codex without prompts.
+mgm skills install --global --agent codex --yes
+
+# Install only the instrumentation skill for Claude Code.
+mgm skills install --agent claude-code --skill instrument-my-app
+```
+
 | Option | Purpose |
 | --- | --- |
 | `--json` | Emit machine-readable JSON where supported. |
