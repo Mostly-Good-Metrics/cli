@@ -23,6 +23,7 @@
   "author": "Mostly Good Metrics",
   "license": "MIT",
   "dependencies": {
+    "@napi-rs/keyring": "1.3.0",
     "commander": "^13.1.0"
   },
   "devDependencies": {

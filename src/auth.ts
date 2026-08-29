@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { execFileSync } from "node:child_process";
+import { Entry } from "@napi-rs/keyring";
 
 function getConfigDir(): string {
   const platform = process.platform;
@@ -59,14 +59,13 @@ function writeConfig(config: Config): void {
   fs.chmodSync(CONFIG_FILE, 0o600);
 }
 
+function credentialEntry(): Entry {
+  return new Entry(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+}
+
 function readKeychainToken(): string | undefined {
-  if (process.platform !== "darwin") return undefined;
   try {
-    const token = execFileSync(
-      "/usr/bin/security",
-      ["find-generic-password", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE, "-w"],
-      { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] },
-    ).trim();
+    const token = credentialEntry().getPassword();
     return token || undefined;
   } catch {
     return undefined;
@@ -74,13 +73,8 @@ function readKeychainToken(): string | undefined {
 }
 
 function saveKeychainToken(token: string): boolean {
-  if (process.platform !== "darwin") return false;
   try {
-    execFileSync(
-      "/usr/bin/security",
-      ["add-generic-password", "-U", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE, "-w", token],
-      { stdio: "ignore" },
-    );
+    credentialEntry().setPassword(token);
     return true;
   } catch {
     return false;
@@ -88,15 +82,10 @@ function saveKeychainToken(token: string): boolean {
 }
 
 function deleteKeychainToken(): void {
-  if (process.platform !== "darwin") return;
   try {
-    execFileSync(
-      "/usr/bin/security",
-      ["delete-generic-password", "-a", KEYCHAIN_ACCOUNT, "-s", KEYCHAIN_SERVICE],
-      { stdio: "ignore" },
-    );
+    credentialEntry().deletePassword();
   } catch {
-    // The key may not exist yet; removing local fallback state still logs out.
+    // The credential may not exist or the OS store may be unavailable.
   }
 }
 

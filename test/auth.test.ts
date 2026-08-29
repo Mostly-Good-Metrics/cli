@@ -7,7 +7,7 @@ const originalPlatform = process.platform;
 let testConfigDir: string | undefined;
 
 afterEach(() => {
-  vi.doUnmock("node:child_process");
+  vi.doUnmock("@napi-rs/keyring");
   vi.resetModules();
   Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
   delete process.env.XDG_CONFIG_HOME;
@@ -16,16 +16,15 @@ afterEach(() => {
 });
 
 describe("credential storage", () => {
-  it("migrates a legacy macOS token into Keychain and hardens the config file", async () => {
+  it("migrates a legacy token into the native credential store and hardens the config file", async () => {
     testConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), "mgm-auth-test-"));
     process.env.XDG_CONFIG_HOME = testConfigDir;
-    Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
-
-    const execFileSync = vi.fn((_: string, args: string[]) => {
-      if (args[0] === "find-generic-password") throw new Error("not found");
-      return Buffer.from("");
+    const getPassword = vi.fn(() => { throw new Error("not found"); });
+    const setPassword = vi.fn();
+    const Entry = vi.fn(function () {
+      return { getPassword, setPassword, deletePassword: vi.fn() };
     });
-    vi.doMock("node:child_process", () => ({ execFileSync }));
+    vi.doMock("@napi-rs/keyring", () => ({ Entry }));
 
     const configDir = path.join(testConfigDir, "mgm");
     fs.mkdirSync(configDir, { recursive: true });
@@ -34,11 +33,8 @@ describe("credential storage", () => {
     const auth = await import("../src/auth.js");
 
     expect(auth.getToken()).toBe("legacy-token");
-    expect(execFileSync).toHaveBeenCalledWith(
-      "/usr/bin/security",
-      ["add-generic-password", "-U", "-a", "oauth-token", "-s", "com.mostlygoodmetrics.cli", "-w", "legacy-token"],
-      { stdio: "ignore" },
-    );
+    expect(Entry).toHaveBeenCalledWith("com.mostlygoodmetrics.cli", "oauth-token");
+    expect(setPassword).toHaveBeenCalledWith("legacy-token");
     expect(JSON.parse(fs.readFileSync(path.join(configDir, "config.json"), "utf-8"))).not.toHaveProperty("token");
     expect(fs.statSync(path.join(configDir, "config.json")).mode & 0o777).toBe(0o600);
   });
