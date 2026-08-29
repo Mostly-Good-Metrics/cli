@@ -1,126 +1,169 @@
 # MostlyGoodMetrics CLI
 
-Command-line interface for [MostlyGoodMetrics](https://mostlygoodmetrics.com) — manage projects, API keys, and dashboards, and run funnels, retention, and queries from your terminal.
-
-Documentation: [docs.mostlygoodmetrics.com](https://docs.mostlygoodmetrics.com)
+The command-line interface for [MostlyGoodMetrics](https://mostlygoodmetrics.com). Use it to manage analytics projects, inspect events and dashboards, run product analyses, and operate experiments from a terminal, script, or coding agent.
 
 ## Install
 
-Coming to npm soon. For now, install from source:
+Requires Node.js 18 or later.
+
+```bash
+npm install -g @mostly-good-metrics/cli
+mgm --version
+```
+
+## Get started
+
+Authenticate, create or select a project, then inspect its dashboard:
+
+```bash
+# Opens the MostlyGoodMetrics sign-in flow in your browser.
+mgm login
+
+# Creates a project and API key, then writes the project context to .mgm.json.
+mgm init
+
+# Reads the project in .mgm.json.
+mgm dashboard --range 30d
+```
+
+Project-scoped commands use the `.mgm.json` file in the current directory. To work without one, pass `--project <project-id>` or set `MGM_PROJECT_ID`.
+
+```bash
+mgm projects list
+mgm dashboard --project prj_123 --range 7d
+```
+
+## Common workflows
+
+### Explore your product data
+
+```bash
+# See the events your project has received.
+mgm events types --project prj_123
+mgm events list --project prj_123 --range 7d
+
+# Run an ad-hoc funnel.
+mgm funnels execute \
+  --steps "app_open,add_to_cart,purchase" \
+  --range 30d \
+  --project prj_123
+
+# Break out unique users by day.
+mgm queries execute \
+  --metric unique_users \
+  --group-by date \
+  --range 7d \
+  --project prj_123
+```
+
+### Manage saved analysis
+
+```bash
+mgm funnels create --name "Checkout" --steps "app_open,checkout_started,purchase"
+mgm retention create --name "Weekly retention" --cohort-event signup --retention-event app_open
+mgm queries create --name "Daily active users" --metric unique_users --group-by date
+
+mgm funnels list
+mgm retention list
+mgm queries list
+```
+
+### Run an experiment
+
+```bash
+mgm experiments create \
+  --name "New paywall" \
+  --variants "control,treatment" \
+  --goal purchase
+
+mgm experiments start exp_123
+mgm experiments results exp_123
+mgm experiments stop exp_123 --yes
+```
+
+### Manage access and dashboards
+
+```bash
+mgm orgs list
+mgm projects create "My App" --org acme
+mgm keys create "CI" --project prj_123
+mgm widgets list --project prj_123
+```
+
+## Automation and agents
+
+The CLI is designed to be discoverable and safe in non-interactive environments.
+
+```bash
+# Inspect the entire command tree or the contract for one command.
+mgm commands --json
+mgm schema experiments update --json
+
+# Produce JSON and select exactly the values a script needs.
+mgm experiments list --project prj_123 --json --jq '.[] | .id'
+
+# Run without a browser or local project file.
+MGM_TOKEN="…" MGM_PROJECT_ID="prj_123" mgm experiments list --json
+
+# Explicitly authorize destructive work in CI.
+mgm experiments delete exp_123 --project prj_123 --no-input --yes --json
+```
+
+| Option | Purpose |
+| --- | --- |
+| `--json` | Emit machine-readable JSON where supported. |
+| `--jq <expression>` | Filter JSON output with the standard `jq` executable. |
+| `--no-input` | Fail instead of opening a browser or prompting. |
+| `-y`, `--yes` | Confirm destructive operations such as deletion, key revocation, widget reset, and stopping an experiment. |
+
+For scripts, use `MGM_TOKEN` rather than `mgm login --token`, because command-line arguments can be visible to other local processes. `MGM_API_URL` and `MGM_APP_URL` can point the CLI at a local development environment.
+
+## Command reference
+
+Run `mgm <command> --help` for flags and examples. The main command groups are:
+
+| Area | Commands |
+| --- | --- |
+| Account | `login`, `signup`, `logout`, `whoami` |
+| Organizations and projects | `orgs`, `projects`, `init` |
+| Credentials | `keys` |
+| Product data | `dashboard`, `events`, `widgets` |
+| Analysis | `funnels`, `retention`, `queries` |
+| Experiments | `experiments` |
+| Discovery | `commands`, `schema` |
+
+Use `mgm commands --json` for the complete command tree, including all subcommands and flags.
+
+## Credentials and local files
+
+Interactive credentials are stored in the operating system credential store when available (macOS Keychain, Windows Credential Manager, or the Linux secret service). If no native store is available, the fallback config file is restricted to the current user.
+
+`mgm init` writes `.mgm.json` in the current directory with the selected project context. Treat API keys printed by `mgm keys create` as secrets and store them in your CI secret manager.
+
+## Development
 
 ```bash
 git clone https://github.com/Mostly-Good-Metrics/cli.git
 cd cli
 npm install
 npm run build
-npm link   # makes the `mgm` command available on your PATH
-```
-
-Requires Node.js 18 or newer.
-
-## Quickstart
-
-```bash
-# Log in (opens your browser for OAuth)
-mgm login
-
-# Set up a project in the current directory (writes .mgm.json)
-mgm init
-
-# See your dashboard
-mgm dashboard --range 30d
-```
-
-Most project-scoped commands read the project from `.mgm.json` (created by `mgm init`) or accept an explicit `--project <id>`. Add `--json` to any read command for machine-readable output.
-
-## Automation and agents
-
-The CLI is designed to be safely discoverable from a script or coding agent:
-
-```bash
-# Discover the complete command tree and each command's flags
-mgm commands --json
-mgm schema experiments update --json
-
-# Emit JSON and filter it with jq
-mgm commands --json --jq '.[] | select(.path == "experiments update")'
-
-# Avoid browser/prompt flows in CI
-MGM_TOKEN="..." MGM_PROJECT_ID="prj_123" mgm experiments list --json
-# Set MGM_API_URL alongside MGM_APP_URL for a local API/OAuth development environment.
-mgm init --project "My App" --org acme --no-input --json
-
-# Explicitly confirm irreversible operations in scripts
-mgm experiments delete exp_123 --project prj_123 --no-input --yes --json
-```
-
-`--no-input` makes commands that would otherwise prompt fail with a usage error. Deletions, key revocations, dashboard-widget resets, and stopping an experiment require confirmation; in non-interactive environments, pass `--yes` explicitly. `--jq` requires the standard `jq` executable.
-
-## Commands
-
-| Command | Description |
-| --- | --- |
-| `mgm login` / `mgm signup` / `mgm logout` | Browser-based OAuth auth (`--token` for CI) |
-| `mgm whoami` | Show current user and organizations |
-| `mgm init` | Create a project + API key and save local context |
-| `mgm orgs list\|show\|create\|invite` | Manage organizations and members |
-| `mgm projects list\|create\|show` | Manage projects |
-| `mgm keys list\|create\|revoke` | Manage project API keys |
-| `mgm dashboard` / `mgm dashboard filters` | Dashboard stats and available filter values |
-| `mgm events list\|types\|send` | Inspect recent events, send test events |
-| `mgm funnels list\|create\|show\|update\|execute\|delete` | Saved and ad-hoc funnels |
-| `mgm retention list\|create\|show\|update\|execute\|delete` | Retention analyses |
-| `mgm queries list\|create\|show\|update\|execute\|delete` | Saved and ad-hoc queries |
-| `mgm experiments list\|create\|show\|update\|start\|stop\|delete` | Manage and analyze A/B experiments |
-| `mgm widgets list\|add\|remove\|reset` | Manage dashboard widgets |
-| `mgm commands` / `mgm schema <command>` | Discover the full command tree and typed flags |
-
-Run `mgm <command> --help` for full options.
-
-## Examples
-
-```bash
-# Ad-hoc funnel across three events
-mgm funnels execute --steps "app_open,add_to_cart,purchase" --range 30d
-
-# Unique users by day, as JSON
-mgm queries execute --metric unique_users --group-by date --range 7d --json
-
-# Create an API key for CI
-mgm keys create "CI" --project prj_123
-```
-
-## Development
-
-```bash
-npm install
-npm run build      # compile TypeScript to dist/
-npm test           # run the vitest suite
-npm run test:watch # watch mode
+npm test
 node bin/mgm.js --help
 ```
 
-CI (build + tests on Node 20 and 22) runs on every PR via GitHub Actions.
+CI runs the build, tests, and a CLI smoke test on Node 20 and 22 for every pull request.
 
 ## Releasing
 
-Publishing is automated by `.github/workflows/release.yml`, which runs on version tags and publishes to npm through npm trusted publishing (GitHub Actions OIDC). It does not use an npm access-token secret.
-
-One-time setup:
-
-1. In the npm package's **Trusted Publisher** settings, configure GitHub Actions for `Mostly-Good-Metrics/cli` and workflow `release.yml`, with **npm publish** allowed.
-2. Keep the `id-token: write` permission in the release workflow; npm uses it to issue a short-lived publish credential.
-
-To ship a release:
+Publishing is automated through npm trusted publishing. Create a version bump commit, then tag and push it:
 
 ```bash
-# bump "version" in package.json (and VERSION in src/program.ts), commit, then:
-git tag v0.1.0
-git push --tags
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
-The workflow installs, builds, tests, and runs `npm publish --access public`. npm generates provenance automatically for trusted-publisher releases.
+The [`release.yml`](.github/workflows/release.yml) workflow builds, tests, and publishes from GitHub Actions using OIDC—no long-lived npm token is stored in the repository. npm automatically attaches provenance to trusted-publisher releases.
 
 ## License
 
-MIT
+[MIT](LICENSE)
