@@ -3,6 +3,7 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
 import { requireProjectId } from "../context.js";
+import { requireConfirmation } from "../runtime.js";
 
 export function registerKeysCommands(program: Command): void {
   const keys = program
@@ -67,10 +68,16 @@ export function registerKeysCommands(program: Command): void {
     .description("Revoke an API key")
     .argument("<id>", "Key ID")
     .option("--project <id>", "Project ID")
-    .action(async (id: string, opts: { project?: string }) => {
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await client.revokeApiKey(projectId, id);
+      await requireConfirmation(`Revoke API key ${id}`);
+      const data = await client.revokeApiKey(projectId, id);
+      if (opts.json) {
+        output.json(data);
+        return;
+      }
       console.log("API key revoked.");
     });
 }

@@ -3,6 +3,7 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
 import { requireProjectId } from "../context.js";
+import { requireConfirmation } from "../runtime.js";
 
 export function registerWidgetsCommands(program: Command): void {
   const widgets = program
@@ -77,10 +78,16 @@ export function registerWidgetsCommands(program: Command): void {
     .description("Remove a widget from the dashboard")
     .argument("<id>", "Widget ID")
     .option("--project <id>", "Project ID")
-    .action(async (id: string, opts: { project?: string }) => {
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await client.deleteWidget(projectId, id);
+      await requireConfirmation(`Remove widget ${id}`);
+      const data = await client.deleteWidget(projectId, id);
+      if (opts.json) {
+        output.json(data);
+        return;
+      }
       console.log("Widget removed.");
     });
 
@@ -92,6 +99,7 @@ export function registerWidgetsCommands(program: Command): void {
     .action(async (opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
+      await requireConfirmation("Reset dashboard widgets to defaults");
       const data = await client.resetWidgets(projectId);
 
       if (opts.json) {

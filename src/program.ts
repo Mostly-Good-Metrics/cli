@@ -11,6 +11,8 @@ import { registerRetentionCommands } from "./commands/retention.js";
 import { registerExperimentsCommands } from "./commands/experiments.js";
 import { registerQueriesCommands } from "./commands/queries.js";
 import { registerWidgetsCommands } from "./commands/widgets.js";
+import { registerDiscoveryCommands } from "./commands/discovery.js";
+import { configureRuntimeOptions } from "./runtime.js";
 
 export const VERSION = "0.1.0";
 
@@ -20,7 +22,14 @@ export function buildProgram(): Command {
   program
     .name("mgm")
     .description("MostlyGoodMetrics CLI")
-    .version(VERSION);
+    .version(VERSION)
+    .option("--jq <expression>", "Filter JSON output with jq (requires jq)")
+    .option("--no-input", "Fail rather than prompt for input")
+    .option("-y, --yes", "Skip confirmation prompts");
+
+  program.hook("preAction", () => {
+    configureRuntimeOptions(program.opts());
+  });
 
   registerAuthCommands(program);
   registerProjectsCommands(program);
@@ -34,6 +43,7 @@ export function buildProgram(): Command {
   registerExperimentsCommands(program);
   registerQueriesCommands(program);
   registerWidgetsCommands(program);
+  registerDiscoveryCommands(program);
 
   return program;
 }

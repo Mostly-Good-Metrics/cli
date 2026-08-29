@@ -1,13 +1,30 @@
 import { Command } from "commander";
 import http from "node:http";
 import crypto from "node:crypto";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
+import { CliUsageError, isNoInput } from "../runtime.js";
 
-const APP_URL = process.env.MGM_APP_URL ?? "https://app.mostlygoodmetrics.com";
 const CLIENT_NAME = "MostlyGoodMetrics CLI";
+
+function getAppUrl(): URL {
+  const configuredUrl = process.env.MGM_APP_URL ?? "https://app.mostlygoodmetrics.com";
+  let appUrl: URL;
+  try {
+    appUrl = new URL(configuredUrl);
+  } catch {
+    throw new CliUsageError("MGM_APP_URL must be a valid URL.");
+  }
+
+  const localHttp = appUrl.protocol === "http:" &&
+    (appUrl.hostname === "localhost" || appUrl.hostname === "127.0.0.1" || appUrl.hostname === "::1");
+  if (appUrl.protocol !== "https:" && !localHttp) {
+    throw new CliUsageError("MGM_APP_URL must use HTTPS (except localhost development URLs).");
+  }
+  return appUrl;
+}
 
 // ============================================================================
 // PKCE helpers
@@ -27,6 +44,7 @@ function generatePKCE() {
 // ============================================================================
 
 async function browserLogin(opts: { signup?: boolean } = {}): Promise<void> {
+  const appUrl = getAppUrl();
   // 1. Start a local HTTP server to receive the callback
   const { port, waitForCallback, server } = await startCallbackServer();
   const redirectUri = `http://localhost:${port}/callback`;
@@ -37,7 +55,7 @@ async function browserLogin(opts: { signup?: boolean } = {}): Promise<void> {
 
   if (!clientId || cachedRedirectUri !== redirectUri) {
     console.log("Registering CLI with MostlyGoodMetrics...");
-    const res = await fetch(`${APP_URL}/oauth/register`, {
+    const res = await fetch(new URL("/oauth/register", appUrl), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -74,14 +92,15 @@ async function browserLogin(opts: { signup?: boolean } = {}): Promise<void> {
   });
   if (opts.signup) params.set("signup", "true");
 
-  const authorizeUrl = `${APP_URL}/oauth/authorize?${params}`;
+  const authorizeUrl = new URL("/oauth/authorize", appUrl);
+  authorizeUrl.search = params.toString();
 
   console.log(opts.signup ? "Opening browser to create an account..." : "Opening browser to log in...");
   console.log();
-  openBrowser(authorizeUrl);
+  openBrowser(authorizeUrl.toString());
   console.log("Waiting for authorization...");
   console.log("(If your browser didn't open, visit this URL:)");
-  console.log(authorizeUrl);
+  console.log(authorizeUrl.toString());
   console.log();
 
   // 5. Wait for the callback
@@ -99,7 +118,7 @@ async function browserLogin(opts: { signup?: boolean } = {}): Promise<void> {
   }
 
   // 6. Exchange code for token
-  const tokenRes = await fetch(`${APP_URL}/oauth/token`, {
+  const tokenRes = await fetch(new URL("/oauth/token", appUrl), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -214,11 +233,11 @@ function openBrowser(url: string): void {
   try {
     const platform = process.platform;
     if (platform === "darwin") {
-      execSync(`open "${url}"`);
+      execFileSync("/usr/bin/open", [url], { stdio: "ignore" });
     } else if (platform === "win32") {
-      execSync(`start "" "${url}"`);
+      execFileSync("rundll32.exe", ["url.dll,FileProtocolHandler", url], { stdio: "ignore" });
     } else {
-      execSync(`xdg-open "${url}"`);
+      execFileSync("xdg-open", [url], { stdio: "ignore" });
     }
   } catch {
     // Browser open failed — user will use the printed URL
@@ -248,6 +267,10 @@ export function registerAuthCommands(program: Command): void {
         return;
       }
 
+      if (isNoInput()) {
+        throw new CliUsageError("login requires --token when --no-input is set.");
+      }
+
       await browserLogin();
     });
 
@@ -255,6 +278,9 @@ export function registerAuthCommands(program: Command): void {
     .command("signup")
     .description("Create a new MostlyGoodMetrics account (opens browser)")
     .action(async () => {
+      if (isNoInput()) {
+        throw new CliUsageError("signup cannot run with --no-input. Create an account in the browser first.");
+      }
       await browserLogin({ signup: true });
     });
 
@@ -286,7 +312,8 @@ export function registerAuthCommands(program: Command): void {
   program
     .command("logout")
     .description("Clear stored session token")
-    .action(async () => {
+    .option("--json", "Output as JSON")
+    .action(async (opts: { json?: boolean }) => {
       const token = auth.getToken();
       if (token) {
         try {
@@ -294,6 +321,10 @@ export function registerAuthCommands(program: Command): void {
         } catch {}
       }
       auth.clearToken();
+      if (opts.json) {
+        output.json({ status: "logged_out" });
+        return;
+      }
       console.log("Logged out.");
     });
 }

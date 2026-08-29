@@ -3,6 +3,7 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
 import { requireProjectId } from "../context.js";
+import { requireConfirmation } from "../runtime.js";
 
 export function registerQueriesCommands(program: Command): void {
   const queries = program
@@ -80,6 +81,56 @@ export function registerQueriesCommands(program: Command): void {
     });
 
   queries
+    .command("show")
+    .description("Show a saved query's full definition")
+    .argument("<id>", "Query ID")
+    .option("--project <id>", "Project ID")
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
+      auth.requireToken();
+      const data = await client.getInsight(requireProjectId(opts.project), id);
+      if (opts.json) {
+        output.json(data.insight);
+        return;
+      }
+      console.log(`Query: ${data.insight.name}`);
+      console.log(`ID: ${data.insight.id}`);
+    });
+
+  queries
+    .command("update")
+    .description("Update a saved query")
+    .argument("<id>", "Query ID")
+    .option("--name <name>", "Query name")
+    .option("--metric <metric>", "Metric")
+    .option("--group-by <field>", "Group by field")
+    .option("--range <range>", "Date range")
+    .option("--visualization <type>", "Chart type")
+    .option("--project <id>", "Project ID")
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: {
+      name?: string; metric?: string; groupBy?: string; range?: string; visualization?: string;
+      project?: string; json?: boolean;
+    }) => {
+      auth.requireToken();
+      const attrs: Record<string, unknown> = {};
+      const queryDefinition: Record<string, unknown> = {};
+      if (opts.name) attrs.name = opts.name;
+      if (opts.metric) queryDefinition.metric = opts.metric;
+      if (opts.groupBy) queryDefinition.group_by = opts.groupBy;
+      if (opts.range) queryDefinition.date_range = opts.range;
+      if (Object.keys(queryDefinition).length > 0) attrs.query_definition = queryDefinition;
+      if (opts.visualization) attrs.visualization = opts.visualization;
+      if (Object.keys(attrs).length === 0) throw new Error("Provide at least one field to update.");
+      const data = await client.updateInsight(requireProjectId(opts.project), id, attrs);
+      if (opts.json) {
+        output.json(data.insight);
+        return;
+      }
+      console.log(`Query updated: ${data.insight.name}`);
+    });
+
+  queries
     .command("execute")
     .description("Execute a saved or ad-hoc query")
     .argument("[id]", "Query ID (omit for ad-hoc)")
@@ -141,10 +192,16 @@ export function registerQueriesCommands(program: Command): void {
     .description("Delete a saved query")
     .argument("<id>", "Query ID")
     .option("--project <id>", "Project ID")
-    .action(async (id: string, opts: { project?: string }) => {
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await client.deleteInsight(projectId, id);
+      await requireConfirmation(`Delete query ${id}`);
+      const data = await client.deleteInsight(projectId, id);
+      if (opts.json) {
+        output.json(data);
+        return;
+      }
       console.log("Query deleted.");
     });
 }

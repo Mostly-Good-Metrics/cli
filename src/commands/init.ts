@@ -3,6 +3,7 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import { saveContext } from "../context.js";
 import readline from "node:readline";
+import { CliUsageError, isNoInput } from "../runtime.js";
 
 function prompt(question: string): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -36,6 +37,9 @@ export function registerInitCommand(program: Command): void {
         if (organizations.length === 1) {
           orgSlug = organizations[0].slug;
         } else {
+          if (isNoInput()) {
+            throw new CliUsageError("init requires --org when --no-input is set and multiple organizations are available.");
+          }
           console.log("Organizations:");
           organizations.forEach((o, i) => console.log(`  ${i + 1}. ${o.name} (${o.slug})`));
           const choice = await prompt("Select organization [1]: ");
@@ -44,16 +48,19 @@ export function registerInitCommand(program: Command): void {
         }
       }
 
+      if (isNoInput() && !opts.project) {
+        throw new CliUsageError("init requires --project when --no-input is set.");
+      }
       const projectName = opts.project ?? (await prompt("Project name: "));
       if (!projectName) {
         console.error("Project name is required.");
         process.exit(1);
       }
 
-      console.log(`Creating project "${projectName}" in ${orgSlug}...`);
+      if (!opts.json) console.log(`Creating project "${projectName}" in ${orgSlug}...`);
       const { project } = await client.createProject(orgSlug, projectName);
 
-      console.log("Creating API key...");
+      if (!opts.json) console.log("Creating API key...");
       const { api_key } = await client.createApiKey(project.id, "Development");
 
       saveContext(project.id, orgSlug);

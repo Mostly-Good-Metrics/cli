@@ -3,6 +3,7 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
 import { requireProjectId } from "../context.js";
+import { requireConfirmation } from "../runtime.js";
 
 export function registerRetentionCommands(program: Command): void {
   const retention = program
@@ -80,6 +81,60 @@ export function registerRetentionCommands(program: Command): void {
     });
 
   retention
+    .command("show")
+    .description("Show a saved retention analysis' full definition")
+    .argument("<id>", "Retention ID")
+    .option("--project <id>", "Project ID")
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
+      auth.requireToken();
+      const data = await client.getRetention(requireProjectId(opts.project), id);
+      if (opts.json) {
+        output.json(data.retention);
+        return;
+      }
+      console.log(`Retention: ${data.retention.name}`);
+      console.log(`Cohort event: ${data.retention.cohort_event}`);
+      console.log(`Days: ${data.retention.retention_days.join(", ")}`);
+    });
+
+  retention
+    .command("update")
+    .description("Update a saved retention analysis")
+    .argument("<id>", "Retention ID")
+    .option("--name <name>", "Name")
+    .option("--cohort-event <event>", "Cohort event name")
+    .option("--retention-event <event>", "Retention event name")
+    .option("--grain <grain>", "Cohort grain (day, week, month)")
+    .option("--days <days>", "Retention days (comma-separated)")
+    .option("--range <range>", "Date range (e.g. 90d)")
+    .option("--project <id>", "Project ID")
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: {
+      name?: string; cohortEvent?: string; retentionEvent?: string; grain?: string; days?: string;
+      range?: string; project?: string; json?: boolean;
+    }) => {
+      auth.requireToken();
+      const attrs: Record<string, unknown> = {};
+      if (opts.name) attrs.name = opts.name;
+      if (opts.cohortEvent) attrs.cohort_event = opts.cohortEvent;
+      if (opts.retentionEvent) attrs.retention_event = opts.retentionEvent;
+      if (opts.grain) attrs.cohort_grain = opts.grain;
+      if (opts.days) {
+        if (!/^\d+(,\d+)*$/.test(opts.days)) throw new Error("--days must be comma-separated whole numbers.");
+        attrs.retention_days = opts.days.split(",").map((day) => parseInt(day, 10));
+      }
+      if (opts.range) attrs.date_range = opts.range;
+      if (Object.keys(attrs).length === 0) throw new Error("Provide at least one field to update.");
+      const data = await client.updateRetention(requireProjectId(opts.project), id, attrs);
+      if (opts.json) {
+        output.json(data.retention);
+        return;
+      }
+      console.log(`Retention analysis updated: ${data.retention.name}`);
+    });
+
+  retention
     .command("execute")
     .description("Execute a saved retention analysis")
     .argument("<id>", "Retention ID")
@@ -118,10 +173,16 @@ export function registerRetentionCommands(program: Command): void {
     .description("Delete a retention analysis")
     .argument("<id>", "Retention ID")
     .option("--project <id>", "Project ID")
-    .action(async (id: string, opts: { project?: string }) => {
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await client.deleteRetention(projectId, id);
+      await requireConfirmation(`Delete retention analysis ${id}`);
+      const data = await client.deleteRetention(projectId, id);
+      if (opts.json) {
+        output.json(data);
+        return;
+      }
       console.log("Retention analysis deleted.");
     });
 }

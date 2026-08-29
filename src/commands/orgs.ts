@@ -88,7 +88,8 @@ export function registerOrgsCommands(program: Command): void {
     .argument("<email>", "Email address to invite")
     .option("--org <slug>", "Organization slug (defaults to your first org)")
     .option("--role <role>", "Role (member, admin)", "member")
-    .action(async (email: string, opts: { org?: string; role: string }) => {
+    .option("--json", "Output as JSON")
+    .action(async (email: string, opts: { org?: string; role: string; json?: boolean }) => {
       auth.requireToken();
 
       let orgSlug = opts.org;
@@ -101,7 +102,11 @@ export function registerOrgsCommands(program: Command): void {
         orgSlug = organizations[0].slug;
       }
 
-      await client.inviteMember(orgSlug, email, opts.role);
+      const data = await client.inviteMember(orgSlug, email, opts.role);
+      if (opts.json) {
+        output.json(data);
+        return;
+      }
       console.log(`Invitation sent to ${email} (${orgSlug}, role: ${opts.role}).`);
     });
 }

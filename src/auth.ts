@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { Entry } from "@napi-rs/keyring";
 
 function getConfigDir(): string {
   const platform = process.platform;
@@ -13,6 +14,8 @@ function getConfigDir(): string {
 
 const CONFIG_DIR = getConfigDir();
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
+const KEYCHAIN_SERVICE = "com.mostlygoodmetrics.cli";
+const KEYCHAIN_ACCOUNT = "oauth-token";
 
 // Migrate from legacy ~/.mgm/config.json if it exists
 const LEGACY_CONFIG = path.join(os.homedir(), ".mgm", "config.json");
@@ -20,6 +23,7 @@ try {
   if (fs.existsSync(LEGACY_CONFIG) && !fs.existsSync(CONFIG_FILE)) {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
     fs.copyFileSync(LEGACY_CONFIG, CONFIG_FILE);
+    fs.chmodSync(CONFIG_FILE, 0o600);
     fs.unlinkSync(LEGACY_CONFIG);
     try { fs.rmdirSync(path.dirname(LEGACY_CONFIG)); } catch {}
   }
@@ -34,7 +38,10 @@ interface Config {
 
 function readConfig(): Config {
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8")) as Config;
+    // Ensure legacy/file-fallback credentials are never left world-readable.
+    try { fs.chmodSync(CONFIG_FILE, 0o600); } catch {}
+    return config;
   } catch {
     return {};
   }
@@ -42,13 +49,59 @@ function readConfig(): Config {
 
 function writeConfig(config: Config): void {
   fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n", {
+  const temporaryFile = `${CONFIG_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(temporaryFile, JSON.stringify(config, null, 2) + "\n", {
     mode: 0o600,
   });
+  fs.chmodSync(temporaryFile, 0o600);
+  fs.renameSync(temporaryFile, CONFIG_FILE);
+  // chmod is required for existing files, where writeFile's mode is ignored.
+  fs.chmodSync(CONFIG_FILE, 0o600);
+}
+
+function credentialEntry(): Entry {
+  return new Entry(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+}
+
+function readKeychainToken(): string | undefined {
+  try {
+    const token = credentialEntry().getPassword();
+    return token || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveKeychainToken(token: string): boolean {
+  try {
+    credentialEntry().setPassword(token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function deleteKeychainToken(): void {
+  try {
+    credentialEntry().deletePassword();
+  } catch {
+    // The credential may not exist or the OS store may be unavailable.
+  }
 }
 
 export function getToken(): string | undefined {
-  return readConfig().token;
+  if (process.env.MGM_TOKEN) return process.env.MGM_TOKEN;
+  const keychainToken = readKeychainToken();
+  if (keychainToken) return keychainToken;
+
+  const config = readConfig();
+  const legacyToken = config.token;
+  if (legacyToken && saveKeychainToken(legacyToken)) {
+    delete config.token;
+    writeConfig(config);
+    return legacyToken;
+  }
+  return legacyToken;
 }
 
 export function getEmail(): string | undefined {
@@ -65,7 +118,13 @@ export function getRedirectUri(): string | undefined {
 
 export function saveToken(token: string, email?: string): void {
   const config = readConfig();
-  config.token = token;
+  if (saveKeychainToken(token)) {
+    delete config.token;
+  } else {
+    // Do not let a stale Keychain value silently override this new login.
+    deleteKeychainToken();
+    config.token = token;
+  }
   if (email) config.email = email;
   writeConfig(config);
 }
@@ -79,6 +138,7 @@ export function saveClientId(clientId: string, redirectUri?: string): void {
 
 export function clearToken(): void {
   const config = readConfig();
+  deleteKeychainToken();
   delete config.token;
   delete config.email;
   writeConfig(config);

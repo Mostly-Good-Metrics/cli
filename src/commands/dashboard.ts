@@ -5,9 +5,11 @@ import * as output from "../output.js";
 import { requireProjectId } from "../context.js";
 
 export function registerDashboardCommands(program: Command): void {
-  program
+  const dashboard = program
     .command("dashboard")
-    .description("Show dashboard stats for current project")
+    .description("Show dashboard stats for current project");
+
+  dashboard
     .option("--project <id>", "Project ID")
     .option("--range <range>", "Date range (e.g. 7d, 30d, 90d)")
     .option("--start <date>", "Start date (YYYY-MM-DD)")
@@ -67,5 +69,26 @@ export function registerDashboardCommands(program: Command): void {
           data.events_by_day.map((d) => [d.date, output.formatNumber(d.count)]),
         );
       }
+    });
+
+  dashboard
+    .command("filters")
+    .description("List available dashboard filter values")
+    .option("--project <id>", "Project ID")
+    .option("--json", "Output as JSON")
+    .action(async (opts: { project?: string; json?: boolean }, command: Command) => {
+      auth.requireToken();
+      // Commander assigns duplicate parent/child options to the parent command
+      // when they appear after the subcommand, so accept either location.
+      const parentOpts = command.parent?.opts() as { project?: string; json?: boolean } | undefined;
+      const projectId = requireProjectId(opts.project ?? parentOpts?.project);
+      const data = await client.getDashboardFilters(projectId);
+
+      if (opts.json ?? parentOpts?.json) {
+        output.json(data);
+        return;
+      }
+
+      output.json(data);
     });
 }

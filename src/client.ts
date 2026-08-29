@@ -1,6 +1,6 @@
 import { getToken } from "./auth.js";
 
-const BASE_URL = "https://api.mostlygoodmetrics.com/api/v2";
+const BASE_URL = process.env.MGM_API_URL ?? "https://api.mostlygoodmetrics.com/api/v2";
 
 export class ApiError extends Error {
   constructor(
@@ -201,8 +201,8 @@ export const executeAdHocRetention = (projectId: string, retention: Record<strin
 export const listExperiments = (projectId: string) =>
   request<{ experiments: Experiment[] }>("GET", `/projects/${projectId}/experiments`);
 
-export const getExperiment = (projectId: string, id: string) =>
-  request<{ experiment: Experiment }>("GET", `/projects/${projectId}/experiments/${id}`);
+export const getExperiment = (projectId: string, id: string, params?: Record<string, string>) =>
+  request<{ experiment: Experiment; results?: unknown }>("GET", `/projects/${projectId}/experiments/${id}`, { params });
 
 export const createExperiment = (projectId: string, attrs: Record<string, unknown>) =>
   request<{ experiment: Experiment }>("POST", `/projects/${projectId}/experiments`, { body: attrs });

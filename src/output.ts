@@ -14,7 +14,21 @@ export function table(headers: string[], rows: string[][]): void {
 }
 
 export function json(data: unknown): void {
-  console.log(JSON.stringify(data, null, 2));
+  const serialized = JSON.stringify(data, null, 2);
+  const expression = jqExpression();
+  if (!expression) {
+    console.log(serialized);
+    return;
+  }
+
+  const result = spawnSync("jq", [expression], { input: serialized, encoding: "utf-8" });
+  if (result.error) {
+    throw new Error("Unable to run jq. Install jq or remove --jq.");
+  }
+  if (result.status !== 0) {
+    throw new Error(result.stderr.trim() || "jq filter failed.");
+  }
+  process.stdout.write(result.stdout);
 }
 
 export function formatTrend(trend: number): string {
@@ -28,4 +42,10 @@ export function formatNumber(n: number): string {
 
 export function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 1) + "\u2026" : s;
+}
+import { spawnSync } from "node:child_process";
+import { getRuntimeOptions } from "./runtime.js";
+
+function jqExpression(): string | undefined {
+  return getRuntimeOptions().jq;
 }

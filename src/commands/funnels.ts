@@ -3,6 +3,7 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
 import { requireProjectId } from "../context.js";
+import { requireConfirmation } from "../runtime.js";
 
 export function registerFunnelsCommands(program: Command): void {
   const funnels = program
@@ -89,6 +90,56 @@ export function registerFunnelsCommands(program: Command): void {
     });
 
   funnels
+    .command("show")
+    .description("Show a saved funnel's full definition")
+    .argument("<id>", "Funnel ID")
+    .option("--project <id>", "Project ID")
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
+      auth.requireToken();
+      const data = await client.getFunnel(requireProjectId(opts.project), id);
+      if (opts.json) {
+        output.json(data.funnel);
+        return;
+      }
+      console.log(`Funnel: ${data.funnel.name}`);
+      console.log(`ID: ${data.funnel.id}`);
+      console.log(`Steps: ${data.funnel.steps.map((step) => step.event_name).join(" -> ")}`);
+    });
+
+  funnels
+    .command("update")
+    .description("Update a saved funnel")
+    .argument("<id>", "Funnel ID")
+    .option("--name <name>", "Funnel name")
+    .option("--steps <steps>", "Comma-separated event names")
+    .option("--window <window>", "Conversion window (e.g. 7d)")
+    .option("--range <range>", "Date range (e.g. 30d)")
+    .option("--project <id>", "Project ID")
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: {
+      name?: string; steps?: string; window?: string; range?: string; project?: string; json?: boolean;
+    }) => {
+      auth.requireToken();
+      const attrs: Record<string, unknown> = {};
+      if (opts.name) attrs.name = opts.name;
+      if (opts.steps) attrs.steps = opts.steps.split(",").map((s) => ({ event_name: s.trim(), name: s.trim() }));
+      if (opts.window) {
+        const match = opts.window.match(/^(\d+)d$/);
+        if (!match) throw new Error("--window must be in days, for example 7d.");
+        attrs.conversion_window_minutes = parseInt(match[1]) * 24 * 60;
+      }
+      if (opts.range) attrs.date_range = opts.range;
+      if (Object.keys(attrs).length === 0) throw new Error("Provide at least one field to update.");
+      const data = await client.updateFunnel(requireProjectId(opts.project), id, attrs);
+      if (opts.json) {
+        output.json(data.funnel);
+        return;
+      }
+      console.log(`Funnel updated: ${data.funnel.name}`);
+    });
+
+  funnels
     .command("execute")
     .description("Execute a saved or ad-hoc funnel")
     .argument("[id]", "Funnel ID (omit for ad-hoc)")
@@ -154,10 +205,16 @@ export function registerFunnelsCommands(program: Command): void {
     .description("Delete a funnel")
     .argument("<id>", "Funnel ID")
     .option("--project <id>", "Project ID")
-    .action(async (id: string, opts: { project?: string }) => {
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      await client.deleteFunnel(projectId, id);
+      await requireConfirmation(`Delete funnel ${id}`);
+      const data = await client.deleteFunnel(projectId, id);
+      if (opts.json) {
+        output.json(data);
+        return;
+      }
       console.log("Funnel deleted.");
     });
 }
