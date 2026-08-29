@@ -8,6 +8,10 @@ import * as output from "../output.js";
 import { CliUsageError, isNoInput } from "../runtime.js";
 
 const CLIENT_NAME = "MostlyGoodMetrics CLI";
+// Bind and redirect to the same IPv4 loopback address. Using `localhost` in
+// the redirect URI can resolve to IPv6 (`::1`) in a browser while the server
+// is listening only on IPv4, leaving the browser unable to deliver the code.
+const CALLBACK_HOST = "127.0.0.1";
 
 function getAppUrl(): URL {
   const configuredUrl = process.env.MGM_APP_URL ?? "https://app.mostlygoodmetrics.com";
@@ -47,7 +51,7 @@ async function browserLogin(opts: { signup?: boolean } = {}): Promise<void> {
   const appUrl = getAppUrl();
   // 1. Start a local HTTP server to receive the callback
   const { port, waitForCallback, server } = await startCallbackServer();
-  const redirectUri = `http://localhost:${port}/callback`;
+  const redirectUri = `http://${CALLBACK_HOST}:${port}/callback`;
 
   // 2. Register as an OAuth client (or reuse cached if same redirect_uri)
   let clientId = auth.getClientId();
@@ -179,7 +183,7 @@ function startCallbackServer(): Promise<{
     });
 
     const server = http.createServer((req, res) => {
-      const url = new URL(req.url ?? "/", `http://localhost`);
+        const url = new URL(req.url ?? "/", `http://${CALLBACK_HOST}`);
 
       if (url.pathname === "/callback") {
         const code = url.searchParams.get("code") ?? undefined;
@@ -213,13 +217,13 @@ function startCallbackServer(): Promise<{
 
     // Try fixed port first (so cached client_id works), fall back to random
     server.on("error", () => {
-      server.listen(0, "127.0.0.1", () => {
+      server.listen(0, CALLBACK_HOST, () => {
         const addr = server.address();
         const port = typeof addr === "object" && addr ? addr.port : 0;
         resolve({ port, waitForCallback: () => callbackPromise, server });
       });
     });
-    server.listen(19891, "127.0.0.1", () => {
+    server.listen(19891, CALLBACK_HOST, () => {
       resolve({ port: 19891, waitForCallback: () => callbackPromise, server });
     });
   });
