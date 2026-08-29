@@ -4,7 +4,7 @@
   "description": "CLI for MostlyGoodMetrics analytics",
   "type": "module",
   "bin": {
-    "mgm": "./bin/mgm.js"
+    "mgm": "bin/mgm.js"
   },
   "main": "./dist/index.js",
   "scripts": {
@@ -43,7 +43,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Mostly-Good-Metrics/cli.git"
+    "url": "git+https://github.com/Mostly-Good-Metrics/cli.git"
   },
   "homepage": "https://github.com/Mostly-Good-Metrics/cli#readme",
   "bugs": {
