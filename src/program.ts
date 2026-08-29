@@ -14,7 +14,7 @@ import { registerWidgetsCommands } from "./commands/widgets.js";
 import { registerDiscoveryCommands } from "./commands/discovery.js";
 import { configureRuntimeOptions } from "./runtime.js";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 
 export function buildProgram(): Command {
   const program = new Command();
