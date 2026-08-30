@@ -12,9 +12,10 @@ import { registerExperimentsCommands } from "./commands/experiments.js";
 import { registerQueriesCommands } from "./commands/queries.js";
 import { registerWidgetsCommands } from "./commands/widgets.js";
 import { registerDiscoveryCommands } from "./commands/discovery.js";
+import { registerSkillsCommands } from "./commands/skills.js";
 import { configureRuntimeOptions } from "./runtime.js";
 
-export const VERSION = "0.1.1";
+export const VERSION = "0.1.3";
 
 export function buildProgram(): Command {
   const program = new Command();
@@ -44,6 +45,7 @@ export function buildProgram(): Command {
   registerQueriesCommands(program);
   registerWidgetsCommands(program);
   registerDiscoveryCommands(program);
+  registerSkillsCommands(program);
 
   return program;
 }
