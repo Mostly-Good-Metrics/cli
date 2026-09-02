@@ -92,9 +92,17 @@ mgm experiments stop exp_123 --yes
 ```bash
 mgm orgs list
 mgm projects create "My App" --org acme
-mgm keys create "CI" --project prj_123
+mgm keys create "iOS Production" --project prj_123 --allow com.example.app
+mgm keys create "Private relay" --project prj_123 --unrestricted --yes
 mgm widgets list --project prj_123
 ```
+
+Creating an API key requires an explicit access choice. Use one or more `--allow`
+values for bundle IDs or domains. Use `--unrestricted` only when the caller cannot
+send a stable identifier; unrestricted creation requires interactive confirmation
+or the global `--yes` flag. After restricted creation, the CLI verifies that the
+server applied the requested environment and complete allowlist before revealing
+the one-time key.
 
 ## Automation and agents
 
@@ -162,7 +170,7 @@ Use `mgm commands --json` for the complete command tree, including all subcomman
 
 Interactive credentials are stored in the operating system credential store when available (macOS Keychain, Windows Credential Manager, or the Linux secret service). If no native store is available, the fallback config file is restricted to the current user.
 
-`mgm init` writes `.mgm.json` in the current directory with the selected project context. Treat API keys printed by `mgm keys create` as secrets and store them in your CI secret manager.
+`mgm init` writes `.mgm.json` in the current directory with the selected project context. Treat API keys printed by `mgm keys create` as secrets and store them in your CI secret manager. Human-readable `mgm keys list` output reports only whether each key is restricted; use `--json` when you need the full identifier allowlist.
 
 ## Development
 

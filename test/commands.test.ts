@@ -198,25 +198,215 @@ describe("orgs", () => {
 describe("keys", () => {
   it("list passes the project id", async () => {
     vi.mocked(client.listApiKeys).mockResolvedValue({
-      api_keys: [{ id: "k_1", name: "Dev", key_prefix: "mgm_ab", created_at: "2026-01-01" }],
+      api_keys: [
+        {
+          id: "k_1",
+          name: "Dev",
+          key_prefix: "mgm_ab",
+          inserted_at: "2026-01-01",
+          environment: "production",
+          allowed_identifiers: ["com.example.app"],
+        },
+      ],
     });
 
     await run(program, "keys", "list", "--project", "p_1");
 
     expect(client.listApiKeys).toHaveBeenCalledWith("p_1");
     expect(output()).toContain("mgm_ab");
+    expect(output()).toContain("Restricted (1)");
+    expect(output()).not.toContain("com.example.app");
+    expect(output()).toContain("2026-01-01");
+  });
+
+  it("list distinguishes unrestricted keys from missing allowlist metadata", async () => {
+    vi.mocked(client.listApiKeys).mockResolvedValue({
+      api_keys: [
+        { id: "k_1", name: "Unrestricted", allowed_identifiers: [] },
+        { id: "k_2", name: "Legacy response" },
+      ],
+    });
+
+    await run(program, "keys", "list", "--project", "p_1");
+
+    expect(output()).toContain("Unrestricted (allows all)");
+    expect(output()).toContain("Unknown");
+    expect(output()).toContain("Legacy response");
+  });
+
+  it("list --json preserves the full identifier allowlist", async () => {
+    const apiKeys = [
+      { id: "k_1", name: "iOS", allowed_identifiers: ["com.example.app"] },
+    ];
+    vi.mocked(client.listApiKeys).mockResolvedValue({ api_keys: apiKeys });
+
+    await run(program, "keys", "list", "--project", "p_1", "--json");
+
+    expect(JSON.parse(output())).toEqual(apiKeys);
   });
 
   it("create prints the one-time secret key", async () => {
     vi.mocked(client.createApiKey).mockResolvedValue({
-      api_key: { id: "k_1", name: "Dev", key: "mgm_secret_123" },
+      api_key: {
+        id: "k_1",
+        name: "Dev",
+        key: "mgm_secret_123",
+        environment: "production",
+        allowed_identifiers: ["com.example.app"],
+      },
     });
 
-    await run(program, "keys", "create", "Dev", "--project", "p_1");
+    await run(
+      program,
+      "keys",
+      "create",
+      "Dev",
+      "--project",
+      "p_1",
+      "--allow",
+      "com.example.app",
+    );
 
-    expect(client.createApiKey).toHaveBeenCalledWith("p_1", "Dev");
+    expect(client.createApiKey).toHaveBeenCalledWith("p_1", "Dev", {
+      environment: "production",
+      allowedIdentifiers: ["com.example.app"],
+    });
     expect(output()).toContain("mgm_secret_123");
     expect(output()).toContain("won't be shown again");
+  });
+
+  it("requires exactly one explicit API key access mode", async () => {
+    await expect(run(program, "keys", "create", "Missing", "--project", "p_1"))
+      .rejects.toThrow("Choose exactly one API key access mode");
+    await expect(run(
+      program,
+      "keys",
+      "create",
+      "Both",
+      "--project",
+      "p_1",
+      "--allow",
+      "com.example.app",
+      "--unrestricted",
+    )).rejects.toThrow("Choose exactly one API key access mode");
+
+    expect(client.createApiKey).not.toHaveBeenCalled();
+  });
+
+  it("requires confirmation before creating an unrestricted key", async () => {
+    await expect(run(
+      program,
+      "keys",
+      "create",
+      "Open",
+      "--project",
+      "p_1",
+      "--unrestricted",
+      "--no-input",
+    )).rejects.toThrow("requires --yes");
+    expect(client.createApiKey).not.toHaveBeenCalled();
+
+    vi.mocked(client.createApiKey).mockResolvedValue({
+      api_key: {
+        id: "k_2",
+        name: "Open",
+        key: "mgm_unrestricted",
+        environment: "production",
+        allowed_identifiers: [],
+      },
+    });
+    await run(
+      program,
+      "keys",
+      "create",
+      "Open",
+      "--project",
+      "p_1",
+      "--unrestricted",
+      "--yes",
+    );
+
+    expect(client.createApiKey).toHaveBeenCalledWith("p_1", "Open", {
+      environment: "production",
+      allowedIdentifiers: undefined,
+    });
+    expect(output()).toContain("mgm_unrestricted");
+  });
+
+  it("withholds an unrestricted key when the backend ignores its environment or access mode", async () => {
+    vi.mocked(client.createApiKey).mockResolvedValue({
+      api_key: {
+        id: "k_open_wrong",
+        name: "Open",
+        key: "mgm_must_not_print",
+        environment: "production",
+        allowed_identifiers: ["com.example.app"],
+      },
+    });
+
+    await expect(run(
+      program,
+      "keys",
+      "create",
+      "Open",
+      "--project",
+      "p_1",
+      "--environment",
+      "development",
+      "--unrestricted",
+      "--yes",
+    )).rejects.toThrow("WARNING: API key k_open_wrong was created");
+
+    expect(output()).not.toContain("mgm_must_not_print");
+    expect(client.revokeApiKey).not.toHaveBeenCalled();
+  });
+
+  it("withholds a restricted key when an old backend omits restriction metadata", async () => {
+    vi.mocked(client.createApiKey).mockResolvedValue({
+      api_key: { id: "k_old", name: "iOS", key: "mgm_must_not_print" },
+    });
+
+    await expect(run(
+      program,
+      "keys",
+      "create",
+      "iOS",
+      "--project",
+      "p_1",
+      "--allow",
+      "com.example.app",
+    )).rejects.toThrow("Revoke it now with: mgm keys revoke k_old --project p_1");
+
+    expect(output()).not.toContain("mgm_must_not_print");
+    expect(client.revokeApiKey).not.toHaveBeenCalled();
+  });
+
+  it("withholds a restricted key when the backend returns different restrictions", async () => {
+    vi.mocked(client.createApiKey).mockResolvedValue({
+      api_key: {
+        id: "k_wrong",
+        name: "iOS",
+        key: "mgm_must_not_print",
+        environment: "development",
+        allowed_identifiers: ["com.example.other"],
+      },
+    });
+
+    await expect(run(
+      program,
+      "keys",
+      "create",
+      "iOS",
+      "--project",
+      "p_1",
+      "--environment",
+      "production",
+      "--allow",
+      "com.example.app",
+    )).rejects.toThrow("WARNING: API key k_wrong was created");
+
+    expect(output()).not.toContain("mgm_must_not_print");
+    expect(client.revokeApiKey).not.toHaveBeenCalled();
   });
 
   it("revoke deletes the key", async () => {
