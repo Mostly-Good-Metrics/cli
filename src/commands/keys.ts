@@ -3,7 +3,19 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
 import { requireProjectId } from "../context.js";
-import { requireConfirmation } from "../runtime.js";
+import { CliUsageError, requireConfirmation } from "../runtime.js";
+
+function normalizeIdentifiers(identifiers: string[] | undefined): string[] {
+  return [...new Set((identifiers ?? []).map((identifier) => identifier.trim()).filter(Boolean))];
+}
+
+function identifiersMatch(requested: string[], returned: string[] | undefined): boolean {
+  if (returned === undefined) return false;
+  const sortedRequested = [...requested].sort();
+  const sortedReturned = normalizeIdentifiers(returned).sort();
+  return sortedRequested.length === sortedReturned.length
+    && sortedRequested.every((identifier, index) => identifier === sortedReturned[index]);
+}
 
 export function registerKeysCommands(program: Command): void {
   const keys = program
@@ -31,26 +43,72 @@ export function registerKeysCommands(program: Command): void {
       }
 
       output.table(
-        ["ID", "Name", "Prefix", "Created"],
+        ["ID", "Name", "Environment", "Access", "Prefix", "Created"],
         data.api_keys.map((k) => [
           k.id,
           k.name,
+          k.environment ?? "-",
+          k.allowed_identifiers === undefined
+            ? "Unknown"
+            : k.allowed_identifiers.length === 0
+              ? "Unrestricted (allows all)"
+              : `Restricted (${k.allowed_identifiers.length})`,
           k.key_prefix ?? "-",
-          k.created_at ?? "-",
+          k.created_at ?? k.inserted_at ?? "-",
         ]),
       );
     });
 
   keys
     .command("create")
-    .description("Create a new API key")
+    .description("Create an API key with --allow or --unrestricted")
     .argument("<name>", "Key name")
     .option("--project <id>", "Project ID")
+    .option("--environment <environment>", "API key environment", "production")
+    .option("--allow <identifier...>", "Allowed bundle IDs or domains")
+    .option(
+      "--unrestricted",
+      "Allow every bundle ID and domain (confirm interactively or pass global --yes)",
+    )
     .option("--json", "Output as JSON")
-    .action(async (name: string, opts: { project?: string; json?: boolean }) => {
+    .action(async (
+      name: string,
+      opts: {
+        project?: string;
+        environment?: string;
+        allow?: string[];
+        unrestricted?: boolean;
+        json?: boolean;
+      },
+    ) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      const data = await client.createApiKey(projectId, name);
+      const allowedIdentifiers = normalizeIdentifiers(opts.allow);
+      const isRestricted = allowedIdentifiers.length > 0;
+
+      if (isRestricted === Boolean(opts.unrestricted)) {
+        throw new CliUsageError(
+          "Choose exactly one API key access mode: --allow <identifier...> or --unrestricted.",
+        );
+      }
+
+      if (opts.unrestricted) {
+        await requireConfirmation("Create an unrestricted API key that allows all bundle IDs and domains");
+      }
+
+      const environment = opts.environment ?? "production";
+      const data = await client.createApiKey(projectId, name, {
+        environment,
+        allowedIdentifiers: isRestricted ? allowedIdentifiers : undefined,
+      });
+
+      const expectedIdentifiers = isRestricted ? allowedIdentifiers : [];
+      if (data.api_key.environment !== environment
+        || !identifiersMatch(expectedIdentifiers, data.api_key.allowed_identifiers)) {
+        throw new CliUsageError(
+          `WARNING: API key ${data.api_key.id} was created, but the server did not apply the requested environment and access restrictions. The raw key has been withheld. Revoke it now with: mgm keys revoke ${data.api_key.id} --project ${projectId}`,
+        );
+      }
 
       if (opts.json) {
         output.json(data.api_key);

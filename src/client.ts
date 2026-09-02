@@ -106,9 +106,19 @@ export const deleteProject = (id: string) =>
 export const listApiKeys = (projectId: string) =>
   request<{ api_keys: ApiKey[] }>("GET", `/projects/${projectId}/api-keys`);
 
-export const createApiKey = (projectId: string, name: string) =>
+export const createApiKey = (
+  projectId: string,
+  name: string,
+  options: { environment?: string; allowedIdentifiers?: string[] } = {},
+) =>
   request<{ api_key: ApiKey & { key: string } }>("POST", `/projects/${projectId}/api-keys`, {
-    body: { name },
+    body: {
+      name,
+      ...(options.environment ? { environment: options.environment } : {}),
+      ...(options.allowedIdentifiers?.length
+        ? { allowed_identifiers: options.allowedIdentifiers }
+        : {}),
+    },
   });
 
 export const revokeApiKey = (projectId: string, keyId: string) =>
@@ -269,6 +279,10 @@ export interface ApiKey {
   key_prefix?: string;
   last_used_at?: string;
   created_at?: string;
+  inserted_at?: string;
+  environment?: string;
+  allowed_identifiers?: string[];
+  request_count?: number;
 }
 
 export interface DashboardResponse {

@@ -73,13 +73,34 @@ describe("API client", () => {
 
   it("sends JSON bodies with Content-Type on POST", async () => {
     const fetchMock = mockFetch({ json: { api_key: { id: "k_1", name: "Dev", key: "sk" } } });
-    await client.createApiKey("p_1", "Dev");
+    await client.createApiKey("p_1", "Dev", {
+      environment: "production",
+      allowedIdentifiers: ["com.example.app"],
+    });
 
     const { url, init, headers } = lastRequest(fetchMock);
     expect(url).toBe(`${BASE}/projects/p_1/api-keys`);
     expect(init.method).toBe("POST");
     expect(headers["Content-Type"]).toBe("application/json");
-    expect(JSON.parse(init.body as string)).toEqual({ name: "Dev" });
+    expect(JSON.parse(init.body as string)).toEqual({
+      name: "Dev",
+      environment: "production",
+      allowed_identifiers: ["com.example.app"],
+    });
+  });
+
+  it("omits an empty identifier allowlist when creating a key", async () => {
+    const fetchMock = mockFetch({ json: { api_key: { id: "k_1", name: "Dev", key: "sk" } } });
+    await client.createApiKey("p_1", "Dev", {
+      environment: "production",
+      allowedIdentifiers: [],
+    });
+
+    const { init } = lastRequest(fetchMock);
+    expect(JSON.parse(init.body as string)).toEqual({
+      name: "Dev",
+      environment: "production",
+    });
   });
 
   it("sends PATCH bodies for updates", async () => {
