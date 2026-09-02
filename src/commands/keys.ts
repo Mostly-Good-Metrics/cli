@@ -5,11 +5,11 @@ import * as output from "../output.js";
 import { requireProjectId } from "../context.js";
 import { CliUsageError, requireConfirmation } from "../runtime.js";
 
-function normalizeIdentifiers(identifiers: string[] | undefined): string[] {
+export function normalizeIdentifiers(identifiers: string[] | undefined): string[] {
   return [...new Set((identifiers ?? []).map((identifier) => identifier.trim()).filter(Boolean))];
 }
 
-function identifiersMatch(requested: string[], returned: string[] | undefined): boolean {
+export function identifiersMatch(requested: string[], returned: string[] | undefined): boolean {
   if (returned === undefined) return false;
   const sortedRequested = [...requested].sort();
   const sortedReturned = normalizeIdentifiers(returned).sort();
@@ -65,10 +65,10 @@ export function registerKeysCommands(program: Command): void {
     .argument("<name>", "Key name")
     .option("--project <id>", "Project ID")
     .option("--environment <environment>", "API key environment", "production")
-    .option("--allow <identifier...>", "Allowed bundle IDs or domains")
+    .option("--allow <identifier...>", "Allowed Apple bundle IDs, Android package names, or web domains")
     .option(
       "--unrestricted",
-      "Allow every bundle ID and domain (confirm interactively or pass global --yes)",
+      "Allow every app identifier and web domain (confirm interactively or pass global --yes)",
     )
     .option("--json", "Output as JSON")
     .action(async (
@@ -93,7 +93,7 @@ export function registerKeysCommands(program: Command): void {
       }
 
       if (opts.unrestricted) {
-        await requireConfirmation("Create an unrestricted API key that allows all bundle IDs and domains");
+        await requireConfirmation("Create an unrestricted API key that allows all app identifiers and web domains");
       }
 
       const environment = opts.environment ?? "production";

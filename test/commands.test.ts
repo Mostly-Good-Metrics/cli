@@ -3,10 +3,15 @@ import { Command } from "commander";
 import { buildProgram } from "../src/program.js";
 import * as client from "../src/client.js";
 import * as auth from "../src/auth.js";
+import * as context from "../src/context.js";
 import { makeTestable, run } from "./helpers.js";
 
 vi.mock("../src/client.js");
 vi.mock("../src/auth.js");
+vi.mock("../src/context.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/context.js")>()),
+  saveContext: vi.fn(),
+}));
 
 class NotLoggedInError extends Error {
   constructor() {
@@ -192,6 +197,132 @@ describe("orgs", () => {
     await run(program, "orgs", "invite", "new@example.com");
 
     expect(client.inviteMember).toHaveBeenCalledWith("acme", "new@example.com", "member");
+  });
+});
+
+describe("init", () => {
+  const user = { id: "u_1", email: "a@b.com", confirmed_at: null, is_admin: false };
+  const organizations = [{ id: "o_1", name: "Acme", slug: "acme" }];
+  const project = { id: "p_new", name: "My iOS App", timezone: "UTC" };
+
+  beforeEach(() => {
+    vi.mocked(client.getMe).mockResolvedValue({ user, organizations });
+    vi.mocked(client.createProject).mockResolvedValue({ project });
+  });
+
+  it("requires an explicit API key access mode before creating a project", async () => {
+    await expect(run(program, "init", "--project", "My iOS App", "--org", "acme"))
+      .rejects.toThrow("Choose exactly one API key access mode");
+
+    expect(client.getMe).not.toHaveBeenCalled();
+    expect(client.createProject).not.toHaveBeenCalled();
+    expect(client.createApiKey).not.toHaveBeenCalled();
+  });
+
+  it("creates and verifies a restricted development key", async () => {
+    vi.mocked(client.createApiKey).mockResolvedValue({
+      api_key: {
+        id: "k_new",
+        name: "Development",
+        key: "mgm_restricted",
+        environment: "development",
+        allowed_identifiers: ["com.example.app"],
+      },
+    });
+
+    await run(
+      program,
+      "init",
+      "--project",
+      "My iOS App",
+      "--org",
+      "acme",
+      "--sdk",
+      "swift",
+      "--allow",
+      "com.example.app",
+    );
+
+    expect(client.createApiKey).toHaveBeenCalledWith("p_new", "Development", {
+      environment: "development",
+      allowedIdentifiers: ["com.example.app"],
+    });
+    expect(context.saveContext).toHaveBeenCalledWith("p_new", "acme");
+    expect(output()).toContain("mgm_restricted");
+  });
+
+  it("requires confirmation for unrestricted init", async () => {
+    await expect(run(
+      program,
+      "init",
+      "--project",
+      "Open App",
+      "--org",
+      "acme",
+      "--unrestricted",
+      "--no-input",
+    )).rejects.toThrow("requires --yes");
+
+    expect(client.createProject).not.toHaveBeenCalled();
+    expect(client.createApiKey).not.toHaveBeenCalled();
+  });
+
+  it("creates an explicitly confirmed unrestricted key for the selected environment", async () => {
+    vi.mocked(client.createApiKey).mockResolvedValue({
+      api_key: {
+        id: "k_open",
+        name: "Production",
+        key: "mgm_unrestricted",
+        environment: "production",
+        allowed_identifiers: [],
+      },
+    });
+
+    await run(
+      program,
+      "init",
+      "--project",
+      "Open App",
+      "--org",
+      "acme",
+      "--environment",
+      "production",
+      "--unrestricted",
+      "--yes",
+    );
+
+    expect(client.createApiKey).toHaveBeenCalledWith("p_new", "Production", {
+      environment: "production",
+      allowedIdentifiers: undefined,
+    });
+    expect(context.saveContext).toHaveBeenCalledWith("p_new", "acme");
+    expect(output()).toContain("mgm_unrestricted");
+  });
+
+  it("withholds a key and project context when restrictions are not applied", async () => {
+    vi.mocked(client.createApiKey).mockResolvedValue({
+      api_key: {
+        id: "k_wrong",
+        name: "Development",
+        key: "mgm_must_not_print",
+        environment: "development",
+        allowed_identifiers: [],
+      },
+    });
+
+    await expect(run(
+      program,
+      "init",
+      "--project",
+      "My iOS App",
+      "--org",
+      "acme",
+      "--allow",
+      "com.example.app",
+    )).rejects.toThrow("Revoke it now with: mgm keys revoke k_wrong --project p_new");
+
+    expect(output()).not.toContain("mgm_must_not_print");
+    expect(context.saveContext).not.toHaveBeenCalled();
   });
 });
 

@@ -19,8 +19,8 @@ Authenticate, create or select a project, then inspect its dashboard:
 # Opens the MostlyGoodMetrics sign-in flow in your browser.
 mgm login
 
-# Creates a project and API key, then writes the project context to .mgm.json.
-mgm init
+# Creates a project and a bundle-restricted API key, then writes .mgm.json.
+mgm init --project "My iOS App" --sdk swift --allow com.example.app
 
 # Reads the project in .mgm.json.
 mgm dashboard --range 30d
@@ -98,11 +98,13 @@ mgm widgets list --project prj_123
 ```
 
 Creating an API key requires an explicit access choice. Use one or more `--allow`
-values for bundle IDs or domains. Use `--unrestricted` only when the caller cannot
+values for Apple bundle IDs, Android package names, or web domains. Use
+`--unrestricted` only when the caller cannot
 send a stable identifier; unrestricted creation requires interactive confirmation
 or the global `--yes` flag. After restricted creation, the CLI verifies that the
 server applied the requested environment and complete allowlist before revealing
-the one-time key.
+the one-time key. The same access choice is required by `mgm init`; its key
+environment defaults to `development` and can be changed with `--environment`.
 
 ## Automation and agents
 
