@@ -3,7 +3,8 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import { saveContext } from "../context.js";
 import readline from "node:readline";
-import { CliUsageError, isNoInput } from "../runtime.js";
+import { CliUsageError, isNoInput, requireConfirmation } from "../runtime.js";
+import { identifiersMatch, normalizeIdentifiers } from "./keys.js";
 
 function prompt(question: string): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -22,9 +23,34 @@ export function registerInitCommand(program: Command): void {
     .option("--project <name>", "Project name (skip prompt)")
     .option("--org <slug>", "Organization slug")
     .option("--sdk <type>", "SDK type (js, react-native, swift, android, flutter)")
+    .option("--environment <environment>", "API key environment", "development")
+    .option("--allow <identifier...>", "Allowed Apple bundle IDs, Android package names, or web domains")
+    .option(
+      "--unrestricted",
+      "Allow every app identifier and web domain (confirm interactively or pass global --yes)",
+    )
     .option("--json", "Output as JSON")
-    .action(async (opts: { project?: string; org?: string; sdk?: string; json?: boolean }) => {
+    .action(async (opts: {
+      project?: string;
+      org?: string;
+      sdk?: string;
+      environment?: string;
+      allow?: string[];
+      unrestricted?: boolean;
+      json?: boolean;
+    }) => {
       auth.requireToken();
+
+      const allowedIdentifiers = normalizeIdentifiers(opts.allow);
+      const isRestricted = allowedIdentifiers.length > 0;
+      if (isRestricted === Boolean(opts.unrestricted)) {
+        throw new CliUsageError(
+          "Choose exactly one API key access mode: --allow <identifier...> or --unrestricted.",
+        );
+      }
+      if (opts.unrestricted) {
+        await requireConfirmation("Create an unrestricted API key that allows all app identifiers and web domains");
+      }
 
       const { user, organizations } = await client.getMe();
       if (organizations.length === 0) {
@@ -61,7 +87,19 @@ export function registerInitCommand(program: Command): void {
       const { project } = await client.createProject(orgSlug, projectName);
 
       if (!opts.json) console.log("Creating API key...");
-      const { api_key } = await client.createApiKey(project.id, "Development");
+      const environment = opts.environment ?? "development";
+      const keyName = environment.charAt(0).toUpperCase() + environment.slice(1);
+      const { api_key } = await client.createApiKey(project.id, keyName, {
+        environment,
+        allowedIdentifiers: isRestricted ? allowedIdentifiers : undefined,
+      });
+      const expectedIdentifiers = isRestricted ? allowedIdentifiers : [];
+      if (api_key.environment !== environment
+        || !identifiersMatch(expectedIdentifiers, api_key.allowed_identifiers)) {
+        throw new CliUsageError(
+          `WARNING: Project ${project.id} and API key ${api_key.id} were created, but the server did not apply the requested environment and access restrictions. The raw key has been withheld. Revoke it now with: mgm keys revoke ${api_key.id} --project ${project.id}`,
+        );
+      }
 
       saveContext(project.id, orgSlug);
 
