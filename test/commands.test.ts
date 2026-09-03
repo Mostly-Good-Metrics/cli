@@ -741,6 +741,68 @@ describe("queries", () => {
     });
   });
 
+  it("execute supports multi-series breakdowns and common filters", async () => {
+    vi.mocked(client.executeAdHocQuery).mockResolvedValue({ results: {} });
+
+    await run(
+      program,
+      "queries", "execute",
+      "--metric", "unique_sessions",
+      "--group-by", "date",
+      "--breakdown-by", "platform",
+      "--granularity", "week",
+      "--platforms", "web, iOS",
+      "--environments", "production",
+      "--events", "page_view, ios_screen_viewed",
+      "--exclude-lifecycle-events",
+      "--range", "30d",
+      "--project", "p_1",
+    );
+
+    expect(client.executeAdHocQuery).toHaveBeenCalledWith("p_1", {
+      metric: "unique_sessions",
+      group_by: "date",
+      breakdown_by: "platform",
+      granularity: "week",
+      date_range: "30d",
+      exclude_lifecycle_events: true,
+      filters: {
+        event_names: ["page_view", "ios_screen_viewed"],
+        platforms: ["web", "iOS"],
+        environments: ["production"],
+      },
+    });
+  });
+
+  it("execute accepts a full JSON definition with flag overrides", async () => {
+    vi.mocked(client.executeAdHocQuery).mockResolvedValue({ results: {} });
+
+    await run(
+      program,
+      "queries", "execute",
+      "--definition", JSON.stringify({ metric: "count_events", group_by: "date", breakdown_by: "platform" }),
+      "--metric", "unique_users",
+      "--project", "p_1",
+    );
+
+    expect(client.executeAdHocQuery).toHaveBeenCalledWith("p_1", {
+      metric: "unique_users",
+      group_by: "date",
+      breakdown_by: "platform",
+    });
+  });
+
+  it("rejects a non-object JSON definition", async () => {
+    await expect(run(
+      program,
+      "queries", "execute",
+      "--definition", "[]",
+      "--project", "p_1",
+    )).rejects.toThrow("--definition must be a JSON object");
+
+    expect(client.executeAdHocQuery).not.toHaveBeenCalled();
+  });
+
   it("delete removes a saved query", async () => {
     vi.mocked(client.deleteInsight).mockResolvedValue({ status: "ok" });
 
@@ -749,15 +811,40 @@ describe("queries", () => {
     expect(client.deleteInsight).toHaveBeenCalledWith("p_1", "q_1");
   });
 
-  it("update builds a partial query definition", async () => {
+  it("update preserves existing query fields while applying advanced changes", async () => {
+    vi.mocked(client.getInsight).mockResolvedValue({
+      query: {
+        id: "q_1",
+        name: "Daily users",
+        query_definition: {
+          metric: "count_events",
+          group_by: "date",
+          filters: { environments: ["production"] },
+        },
+      },
+    });
     vi.mocked(client.updateInsight).mockResolvedValue({
       query: { id: "q_1", name: "Daily users" },
     });
 
-    await run(program, "queries", "update", "q_1", "--metric", "unique_users", "--range", "30d", "--project", "p_1");
+    await run(
+      program,
+      "queries", "update", "q_1",
+      "--metric", "unique_users",
+      "--breakdown-by", "platform",
+      "--range", "30d",
+      "--project", "p_1",
+    );
 
+    expect(client.getInsight).toHaveBeenCalledWith("p_1", "q_1");
     expect(client.updateInsight).toHaveBeenCalledWith("p_1", "q_1", {
-      query_definition: { metric: "unique_users", date_range: "30d" },
+      query_definition: {
+        metric: "unique_users",
+        group_by: "date",
+        breakdown_by: "platform",
+        date_range: "30d",
+        filters: { environments: ["production"] },
+      },
     });
   });
 });
@@ -845,6 +932,32 @@ describe("widgets", () => {
       height: 2,
     });
     expect(output()).toContain("w_2");
+  });
+
+  it("add supports saved funnel and explicit placement", async () => {
+    vi.mocked(client.createWidget).mockResolvedValue({
+      widget: { id: "w_3", widget_type: "funnel" },
+    });
+
+    await run(
+      program,
+      "widgets", "add", "funnel",
+      "--funnel", "f_1",
+      "--col", "2",
+      "--row", "7",
+      "--width", "2",
+      "--height", "3",
+      "--project", "p_1",
+    );
+
+    expect(client.createWidget).toHaveBeenCalledWith("p_1", {
+      widget_type: "funnel",
+      saved_funnel_id: "f_1",
+      col: 2,
+      row: 7,
+      width: 2,
+      height: 3,
+    });
   });
 
   it("remove deletes the widget", async () => {
