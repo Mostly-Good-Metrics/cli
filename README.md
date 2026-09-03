@@ -58,7 +58,13 @@ mgm funnels execute \
 mgm queries execute \
   --metric unique_users \
   --group-by date \
+  --breakdown-by platform \
   --range 7d \
+  --project prj_123
+
+# Power-user escape hatch: use the full safe MGM query definition.
+mgm queries execute \
+  --definition '{"metric":"count_events","group_by":"date","breakdown_by":"prop:screen","event_filter":["ios_screen_viewed"],"date_range":"30d"}' \
   --project prj_123
 ```
 
@@ -95,6 +101,7 @@ mgm projects create "My App" --org acme
 mgm keys create "iOS Production" --project prj_123 --allow com.example.app
 mgm keys create "Private relay" --project prj_123 --unrestricted --yes
 mgm widgets list --project prj_123
+mgm widgets add funnel --funnel fun_123 --project prj_123
 ```
 
 Creating an API key requires an explicit access choice. Use one or more `--allow`
