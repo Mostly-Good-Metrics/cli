@@ -34,6 +34,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete process.env.MGM_API_KEY;
   vi.restoreAllMocks();
 });
 
@@ -306,6 +307,40 @@ describe("events", () => {
     });
     expect(output()).toContain("No analytics event was sent");
   });
+
+  it("send verifies the API key belongs to the selected project before ingestion", async () => {
+    process.env.MGM_API_KEY = "mgm_proj_abc123_secret";
+    vi.mocked(client.listApiKeys).mockResolvedValue({
+      api_keys: [{ id: "k_1", name: "Development", key_prefix: "mgm_proj_abc123", revoked_at: null }],
+    });
+    vi.mocked(client.sendEvents).mockResolvedValue({ accepted: 1 });
+
+    await run(
+      program,
+      "events", "send", "{\"name\":\"checkout_completed\",\"user_id\":\"u_1\"}",
+      "--project", "p_1",
+      "--json",
+    );
+
+    expect(client.listApiKeys).toHaveBeenCalledWith("p_1");
+    expect(client.sendEvents).toHaveBeenCalledWith("mgm_proj_abc123_secret", [{
+      name: "checkout_completed",
+      user_id: "u_1",
+    }]);
+    expect(JSON.parse(output())).toMatchObject({ status: "sent", project_id: "p_1" });
+  });
+
+  it("send fails closed when the API key does not belong to the selected project", async () => {
+    process.env.MGM_API_KEY = "mgm_proj_wrong_secret";
+    vi.mocked(client.listApiKeys).mockResolvedValue({
+      api_keys: [{ id: "k_1", name: "Development", key_prefix: "mgm_proj_abc123", revoked_at: null }],
+    });
+
+    await expect(
+      run(program, "events", "send", "{\"name\":\"test_event\"}", "--project", "p_1"),
+    ).rejects.toThrow("does not match an active API key");
+    expect(client.sendEvents).not.toHaveBeenCalled();
+  });
 });
 
 describe("funnels", () => {
@@ -364,13 +399,18 @@ describe("funnels", () => {
   it("execute with --steps runs an ad-hoc funnel", async () => {
     vi.mocked(client.executeAdHocFunnel).mockResolvedValue({ results: {} });
 
-    await run(program, "funnels", "execute", "--steps", "a,b", "--range", "14d", "--project", "p_1");
+    await run(
+      program,
+      "funnels", "execute", "--steps", "a,b", "--window", "2d", "--range", "14d",
+      "--project", "p_1",
+    );
 
     expect(client.executeAdHocFunnel).toHaveBeenCalledWith("p_1", {
       steps: [
         { event_name: "a", name: "a" },
         { event_name: "b", name: "b" },
       ],
+      conversion_window_minutes: 2 * 24 * 60,
       date_range: "14d",
     });
     expect(client.executeFunnel).not.toHaveBeenCalled();
@@ -401,7 +441,7 @@ describe("funnels", () => {
 });
 
 describe("queries", () => {
-  it("execute with --metric runs an ad-hoc query", async () => {
+  it("execute with --metric and --events runs a filtered ad-hoc query", async () => {
     vi.mocked(client.executeAdHocQuery).mockResolvedValue({ results: {} });
 
     await run(
@@ -409,6 +449,7 @@ describe("queries", () => {
       "queries", "execute",
       "--metric", "unique_users",
       "--group-by", "date",
+      "--events", "signup, purchase",
       "--range", "7d",
       "--project", "p_1",
     );
@@ -416,6 +457,7 @@ describe("queries", () => {
     expect(client.executeAdHocQuery).toHaveBeenCalledWith("p_1", {
       metric: "unique_users",
       group_by: "date",
+      filters: { event_names: ["signup", "purchase"] },
       date_range: "7d",
     });
   });
@@ -442,6 +484,36 @@ describe("queries", () => {
 });
 
 describe("retention", () => {
+  it("execute without an ID runs an ad-hoc retention analysis", async () => {
+    vi.mocked(client.executeAdHocRetention).mockResolvedValue({ results: {} });
+
+    await run(
+      program,
+      "retention", "execute",
+      "--cohort-event", "signup",
+      "--retention-event", "app_open",
+      "--grain", "day",
+      "--days", "1,3,7",
+      "--range", "30d",
+      "--project", "p_1",
+    );
+
+    expect(client.executeAdHocRetention).toHaveBeenCalledWith("p_1", {
+      cohort_event: "signup",
+      retention_event: "app_open",
+      cohort_grain: "day",
+      retention_days: [1, 3, 7],
+      date_range: "30d",
+    });
+  });
+
+  it("execute without an ID requires a cohort event", async () => {
+    await expect(
+      run(program, "retention", "execute", "--project", "p_1"),
+    ).rejects.toThrow("Provide a retention ID or --cohort-event");
+    expect(client.executeAdHocRetention).not.toHaveBeenCalled();
+  });
+
   it("update sends only the supplied retention fields", async () => {
     vi.mocked(client.updateRetention).mockResolvedValue({
       retention: {

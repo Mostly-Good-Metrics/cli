@@ -139,12 +139,14 @@ export function registerQueriesCommands(program: Command): void {
     .argument("[id]", "Query ID (omit for ad-hoc)")
     .option("--metric <metric>", "Metric (ad-hoc)")
     .option("--group-by <field>", "Group by field (ad-hoc)")
+    .option("--events <names>", "Comma-separated event names to include (ad-hoc)")
     .option("--range <range>", "Date range")
     .option("--project <id>", "Project ID")
     .option("--json", "Output as JSON")
     .action(async (id: string | undefined, opts: {
       metric?: string;
       groupBy?: string;
+      events?: string;
       range?: string;
       project?: string;
       json?: boolean;
@@ -160,6 +162,11 @@ export function registerQueriesCommands(program: Command): void {
         const query: Record<string, unknown> = { metric: opts.metric };
         if (opts.groupBy) query.group_by = opts.groupBy;
         if (opts.range) query.date_range = opts.range;
+        if (opts.events) {
+          query.filters = {
+            event_names: opts.events.split(",").map((name) => name.trim()).filter(Boolean),
+          };
+        }
         result = await client.executeAdHocQuery(projectId, query);
       } else {
         console.error("Provide a query ID or --metric for ad-hoc execution.");

@@ -3,7 +3,7 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
 import { requireProjectId } from "../context.js";
-import { requireConfirmation } from "../runtime.js";
+import { CliUsageError, requireConfirmation } from "../runtime.js";
 
 export function registerRetentionCommands(program: Command): void {
   const retention = program
@@ -136,14 +136,46 @@ export function registerRetentionCommands(program: Command): void {
 
   retention
     .command("execute")
-    .description("Execute a saved retention analysis")
-    .argument("<id>", "Retention ID")
+    .description("Execute a saved or ad-hoc retention analysis")
+    .argument("[id]", "Retention ID (omit for ad-hoc)")
+    .option("--cohort-event <event>", "Cohort event name (ad-hoc)")
+    .option("--retention-event <event>", "Retention event (ad-hoc; omit for any event)")
+    .option("--grain <grain>", "Cohort grain (day, week, month)", "week")
+    .option("--days <days>", "Retention days (comma-separated)", "1,7,14,30")
+    .option("--range <range>", "Date range (e.g. 90d)")
     .option("--project <id>", "Project ID")
     .option("--json", "Output as JSON")
-    .action(async (id: string, opts: { project?: string; json?: boolean }) => {
+    .action(async (id: string | undefined, opts: {
+      cohortEvent?: string;
+      retentionEvent?: string;
+      grain: string;
+      days: string;
+      range?: string;
+      project?: string;
+      json?: boolean;
+    }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
-      const result = await client.executeRetention(projectId, id);
+      let result: { results: unknown };
+
+      if (id) {
+        result = await client.executeRetention(projectId, id);
+      } else {
+        if (!opts.cohortEvent) {
+          throw new CliUsageError("Provide a retention ID or --cohort-event for ad-hoc execution.");
+        }
+        if (!/^\d+(,\d+)*$/.test(opts.days)) {
+          throw new CliUsageError("--days must be comma-separated whole numbers.");
+        }
+        const retentionDefinition: Record<string, unknown> = {
+          cohort_event: opts.cohortEvent,
+          retention_event: opts.retentionEvent ?? null,
+          cohort_grain: opts.grain,
+          retention_days: opts.days.split(",").map((day) => parseInt(day, 10)),
+        };
+        if (opts.range) retentionDefinition.date_range = opts.range;
+        result = await client.executeAdHocRetention(projectId, retentionDefinition);
+      }
 
       if (opts.json) {
         output.json(result);

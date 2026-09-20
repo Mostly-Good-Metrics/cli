@@ -144,11 +144,13 @@ export function registerFunnelsCommands(program: Command): void {
     .description("Execute a saved or ad-hoc funnel")
     .argument("[id]", "Funnel ID (omit for ad-hoc)")
     .option("--steps <steps>", "Comma-separated event names (ad-hoc)")
+    .option("--window <window>", "Conversion window (e.g. 7d, ad-hoc)")
     .option("--range <range>", "Date range")
     .option("--project <id>", "Project ID")
     .option("--json", "Output as JSON")
     .action(async (id: string | undefined, opts: {
       steps?: string;
+      window?: string;
       range?: string;
       project?: string;
       json?: boolean;
@@ -166,6 +168,11 @@ export function registerFunnelsCommands(program: Command): void {
           name: s.trim(),
         }));
         const body: Record<string, unknown> = { steps };
+        if (opts.window) {
+          const match = opts.window.match(/^(\d+)d$/);
+          if (!match) throw new Error("--window must be in days, for example 7d.");
+          body.conversion_window_minutes = parseInt(match[1], 10) * 24 * 60;
+        }
         if (opts.range) body.date_range = opts.range;
         result = await client.executeAdHocFunnel(projectId, body);
       } else {

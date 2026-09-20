@@ -51,6 +51,7 @@ mgm events define checkout_completed \
 # Run an ad-hoc funnel.
 mgm funnels execute \
   --steps "app_open,add_to_cart,purchase" \
+  --window 1d \
   --range 30d \
   --project prj_123
 
@@ -58,8 +59,21 @@ mgm funnels execute \
 mgm queries execute \
   --metric unique_users \
   --group-by date \
+  --events "signup,purchase" \
   --range 7d \
   --project prj_123
+
+# Run an ad-hoc retention analysis without saving it first.
+mgm retention execute \
+  --cohort-event signup \
+  --retention-event app_open \
+  --grain week \
+  --days 1,7,14,30 \
+  --range 90d \
+  --project prj_123
+
+# Test ingestion with an active API key for the selected project.
+MGM_API_KEY="mgm_proj_…" mgm events send '{"name":"test_event"}' --project prj_123
 ```
 
 ### Manage saved analysis
@@ -120,7 +134,7 @@ mgm experiments delete exp_123 --project prj_123 --no-input --yes --json
 MGM ships skills for instrumentation, metric analysis, funnel diagnosis, and weekly reviews. The CLI uses the standard npm-delivered [`skills`](https://skills.sh) installer, so the same command works for Codex, Claude Code, and other supported agents.
 
 ```bash
-# See the four available MGM skills.
+# See the eight available MGM skills.
 mgm skills list
 
 # Install interactively in the current project.
@@ -140,7 +154,7 @@ mgm skills install --agent claude-code --skill instrument-my-app
 | `--no-input` | Fail instead of opening a browser or prompting. |
 | `-y`, `--yes` | Confirm destructive operations such as deletion, key revocation, widget reset, and stopping an experiment. |
 
-For scripts, use `MGM_TOKEN` rather than `mgm login --token`, because command-line arguments can be visible to other local processes. `MGM_API_URL` and `MGM_APP_URL` can point the CLI at a local development environment.
+For scripts, use `MGM_TOKEN` rather than `mgm login --token`, because command-line arguments can be visible to other local processes. `mgm events send` separately requires `MGM_API_KEY`; the CLI verifies its prefix against the active keys for the selected project before ingestion. `MGM_API_URL`, `MGM_APP_URL`, and `MGM_INGEST_URL` can point the CLI at a local development environment.
 
 ## Command reference
 

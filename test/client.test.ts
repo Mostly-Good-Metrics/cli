@@ -11,6 +11,7 @@ function mockFetch(response: {
   ok?: boolean;
   json?: unknown;
   jsonThrows?: boolean;
+  text?: string;
 }) {
   const status = response.status ?? 200;
   const fetchMock = vi.fn().mockResolvedValue({
@@ -19,6 +20,7 @@ function mockFetch(response: {
     json: response.jsonThrows
       ? vi.fn().mockRejectedValue(new Error("invalid json"))
       : vi.fn().mockResolvedValue(response.json ?? {}),
+    text: vi.fn().mockResolvedValue(response.text ?? ""),
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -80,6 +82,18 @@ describe("API client", () => {
     expect(init.method).toBe("POST");
     expect(headers["Content-Type"]).toBe("application/json");
     expect(JSON.parse(init.body as string)).toEqual({ name: "Dev" });
+  });
+
+  it("sends ingestion events with the project API key instead of the session token", async () => {
+    const fetchMock = mockFetch({ json: { accepted: 1 } });
+    await client.sendEvents("mgm_proj_abc_secret", [{ name: "test_event" }]);
+
+    const { url, init, headers } = lastRequest(fetchMock);
+    expect(url).toBe("https://ingest.mostlygoodmetrics.com/v1/events");
+    expect(init.method).toBe("POST");
+    expect(headers["X-MGM-Key"]).toBe("mgm_proj_abc_secret");
+    expect(headers.Authorization).toBeUndefined();
+    expect(JSON.parse(init.body as string)).toEqual({ events: [{ name: "test_event" }] });
   });
 
   it("sends PATCH bodies for updates", async () => {
