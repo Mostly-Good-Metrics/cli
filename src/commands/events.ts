@@ -3,6 +3,7 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
 import { requireProjectId } from "../context.js";
+import { CliUsageError } from "../runtime.js";
 
 export function registerEventsCommands(program: Command): void {
   const events = program
@@ -119,21 +120,20 @@ export function registerEventsCommands(program: Command): void {
         process.exit(1);
       }
 
-      // Send via the ingestion endpoint
-      const res = await fetch("https://ingest.mostlygoodmetrics.com/v1/events", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${auth.requireToken()}`,
-        },
-        body: JSON.stringify({ events: [event] }),
-      });
-
-      if (!res.ok) {
-        const body = await res.text();
-        console.error(`Failed to send event: ${res.status} ${body}`);
-        process.exit(1);
+      const apiKey = process.env.MGM_API_KEY;
+      if (!apiKey) {
+        throw new CliUsageError("Set MGM_API_KEY to an active API key for the selected project.");
       }
+
+      const { api_keys: apiKeys } = await client.listApiKeys(projectId);
+      const belongsToProject = apiKeys.some(
+        (key) => !key.revoked_at && key.key_prefix && apiKey.startsWith(key.key_prefix),
+      );
+      if (!belongsToProject) {
+        throw new CliUsageError("MGM_API_KEY does not match an active API key for the selected project.");
+      }
+
+      await client.sendEvents(apiKey, [event]);
 
       if (opts.json) {
         output.json({ status: "sent", event });
