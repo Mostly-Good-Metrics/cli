@@ -144,6 +144,30 @@ export const listEventDefinitions = (projectId: string) =>
 export const createEventDefinition = (projectId: string, attrs: Record<string, unknown>) =>
   request<{ definition: EventDefinition }>("POST", `/projects/${projectId}/events/definitions`, { body: attrs });
 
+export async function sendEvents(
+  apiKey: string,
+  events: Record<string, unknown>[],
+): Promise<unknown> {
+  const ingestUrl = process.env.MGM_INGEST_URL ?? "https://ingest.mostlygoodmetrics.com/v1/events";
+  const res = await fetch(ingestUrl, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-MGM-Key": apiKey,
+    },
+    body: JSON.stringify({ events }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new ApiError(res.status, "ingestion_failed", body || `HTTP ${res.status}`);
+  }
+
+  if (res.status === 204) return {};
+  return res.json();
+}
+
 // Insights (Saved Queries)
 export const listInsights = (projectId: string) =>
   request<{ queries: SavedQuery[] }>("GET", `/projects/${projectId}/insights`);
@@ -283,6 +307,7 @@ export interface ApiKey {
   environment?: string;
   allowed_identifiers?: string[];
   request_count?: number;
+  revoked_at?: string | null;
 }
 
 export interface DashboardResponse {
