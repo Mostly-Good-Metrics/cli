@@ -13,6 +13,7 @@ import { registerQueriesCommands } from "./commands/queries.js";
 import { registerWidgetsCommands } from "./commands/widgets.js";
 import { registerDiscoveryCommands } from "./commands/discovery.js";
 import { registerSkillsCommands } from "./commands/skills.js";
+import { registerGoalsCommands } from "./commands/goals.js";
 import { configureRuntimeOptions } from "./runtime.js";
 
 export const VERSION = "0.1.3";
@@ -42,6 +43,7 @@ export function buildProgram(): Command {
   registerFunnelsCommands(program);
   registerRetentionCommands(program);
   registerExperimentsCommands(program);
+  registerGoalsCommands(program);
   registerQueriesCommands(program);
   registerWidgetsCommands(program);
   registerDiscoveryCommands(program);

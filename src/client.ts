@@ -232,6 +232,16 @@ export const startExperiment = (projectId: string, id: string) =>
 export const stopExperiment = (projectId: string, id: string) =>
   request<{ experiment: Experiment }>("POST", `/projects/${projectId}/experiments/${id}/stop`);
 
+// Goals
+export const listGoals = (projectId: string) =>
+  request<{ goals: Goal[] }>("GET", `/projects/${projectId}/goals`);
+
+export const getGoal = (projectId: string, id: string) =>
+  request<{ goal: Goal }>("GET", `/projects/${projectId}/goals/${id}`);
+
+export const createGoal = (projectId: string, attrs: Record<string, unknown>) =>
+  request<{ goal: Goal }>("POST", `/projects/${projectId}/goals`, { body: attrs });
+
 // Widgets
 export const listWidgets = (projectId: string) =>
   request<{ widgets: Widget[] }>("GET", `/projects/${projectId}/widgets`);
@@ -359,6 +369,30 @@ export interface Experiment {
   variants: string[];
   goal_event: string;
   status?: string;
+}
+
+export interface Goal {
+  id: string;
+  project_id: string;
+  source: Record<string, unknown>;
+  target_type: string;
+  target: number;
+  window: Record<string, unknown>;
+  notify_on: "milestone" | "off_pace" | "both" | "off";
+  current_value: number;
+  percent_complete: number;
+  pace_line: {
+    status: string;
+    actual_per_day?: number | null;
+    required_per_day?: number | null;
+    variance_percent?: number | null;
+    text: string;
+  };
+  pace_line_text: string;
+  projected_finish: string | null;
+  milestone_crossings: number[];
+  inserted_at: string;
+  updated_at: string;
 }
 
 export interface Widget {
