@@ -908,6 +908,8 @@ describe("goals", () => {
     target: 100,
     window: { type: "rolling", days: 7 },
     notify_on: "both" as const,
+    evaluation_status: "available" as const,
+    evaluation_error: null,
     current_value: 42,
     percent_complete: 42,
     pace_line: { status: "ahead", text: "12% ahead" },
@@ -926,6 +928,31 @@ describe("goals", () => {
     expect(client.listGoals).toHaveBeenCalledWith("p_1");
     expect(output()).toContain("42%");
     expect(output()).toContain("12% ahead");
+  });
+
+  it("keeps unavailable goals visible without inventing progress", async () => {
+    const unavailable = {
+      ...goal,
+      id: "g_unavailable",
+      evaluation_status: "unavailable" as const,
+      evaluation_error: "saved_query_not_found",
+      current_value: null,
+      percent_complete: null,
+      pace_line: { status: "unavailable", text: "Progress unavailable" },
+      pace_line_text: "Progress unavailable",
+      projected_finish: null,
+      milestone_crossings: [],
+    };
+    vi.mocked(client.listGoals).mockResolvedValue({ goals: [goal, unavailable] });
+    vi.mocked(client.getGoal).mockResolvedValue({ goal: unavailable });
+
+    await run(program, "goals", "list", "--project", "p_1");
+    expect(output()).toContain("unavailable");
+    expect(output()).not.toContain("null%");
+
+    await run(program, "goals", "show", unavailable.id, "--project", "p_1");
+    expect(output()).toContain("Progress: unavailable");
+    expect(output()).toContain("Evaluation error: saved_query_not_found");
   });
 
   it("creates a flexible goal from JSON definitions", async () => {

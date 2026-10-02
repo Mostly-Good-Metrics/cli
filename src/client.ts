@@ -379,8 +379,10 @@ export interface Goal {
   target: number;
   window: Record<string, unknown>;
   notify_on: "milestone" | "off_pace" | "both" | "off";
-  current_value: number;
-  percent_complete: number;
+  evaluation_status: "available" | "unavailable";
+  evaluation_error: string | null;
+  current_value: number | null;
+  percent_complete: number | null;
   pace_line: {
     status: string;
     actual_per_day?: number | null;

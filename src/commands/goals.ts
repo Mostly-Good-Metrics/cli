@@ -29,9 +29,12 @@ function printGoal(goal: client.Goal): void {
   console.log(`Goal: ${goal.id}`);
   console.log(`Source: ${String(goal.source.type ?? "-")}`);
   console.log(`Target: ${goal.target_type} ${goal.target}`);
-  console.log(`Current: ${goal.current_value}`);
-  console.log(`Progress: ${goal.percent_complete}%`);
+  console.log(`Current: ${goal.current_value ?? "-"}`);
+  console.log(`Progress: ${goal.percent_complete === null ? "unavailable" : `${goal.percent_complete}%`}`);
   console.log(`Pace: ${goal.pace_line_text}`);
+  if (goal.evaluation_status === "unavailable") {
+    console.log(`Evaluation error: ${goal.evaluation_error ?? "evaluation_failed"}`);
+  }
   console.log(`Projected finish: ${goal.projected_finish ?? "-"}`);
   console.log(`Notify on: ${goal.notify_on}`);
 }
@@ -64,8 +67,8 @@ export function registerGoalsCommands(program: Command): void {
           goal.id,
           String(goal.source.type ?? "-"),
           `${goal.target_type} ${goal.target}`,
-          String(goal.current_value),
-          `${goal.percent_complete}%`,
+          goal.current_value === null ? "-" : String(goal.current_value),
+          goal.percent_complete === null ? "unavailable" : `${goal.percent_complete}%`,
           goal.pace_line_text,
         ]),
       );
