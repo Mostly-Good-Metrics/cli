@@ -93,6 +93,20 @@ mgm experiments results exp_123
 mgm experiments stop exp_123 --yes
 ```
 
+### Track goals
+
+```bash
+mgm goals create \
+  --source '{"type":"event_count","event_name":"purchase"}' \
+  --target-type reach \
+  --target 1000 \
+  --window '{"type":"deadline","start_date":"2026-10-01","deadline":"2026-10-31"}' \
+  --notify-on both
+
+mgm goals list
+mgm goals show <goal-id>
+```
+
 ### Manage access and dashboards
 
 ```bash
@@ -169,7 +183,7 @@ Run `mgm <command> --help` for flags and examples. The main command groups are:
 | Organizations and projects | `orgs`, `projects`, `init` |
 | Credentials | `keys` |
 | Product data | `dashboard`, `events`, `widgets` |
-| Analysis | `funnels`, `retention`, `queries` |
+| Analysis | `funnels`, `retention`, `queries`, `goals` |
 | Experiments | `experiments` |
 | Discovery | `commands`, `schema` |
 
