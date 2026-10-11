@@ -39,6 +39,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete process.env.MGM_API_KEY;
   vi.restoreAllMocks();
 });
 
@@ -626,6 +627,57 @@ describe("events", () => {
       description: "A customer completes checkout",
     });
     expect(output()).toContain("No analytics event was sent");
+  });
+
+  it("send verifies the API key belongs to the selected project before ingestion", async () => {
+    process.env.MGM_API_KEY = "mgm_proj_abc123_secret";
+    vi.mocked(client.listApiKeys).mockResolvedValue({
+      api_keys: [{ id: "k_1", name: "Development", key_prefix: "mgm_proj_abc123", revoked_at: null }],
+    });
+    vi.mocked(client.sendEvents).mockResolvedValue({ accepted: 1 });
+
+    await run(
+      program,
+      "events", "send", "{\"name\":\"checkout_completed\",\"user_id\":\"u_1\"}",
+      "--project", "p_1",
+      "--json",
+    );
+
+    expect(client.listApiKeys).toHaveBeenCalledWith("p_1");
+    expect(client.sendEvents).toHaveBeenCalledWith("mgm_proj_abc123_secret", [{
+      name: "checkout_completed",
+      user_id: "u_1",
+    }]);
+    expect(JSON.parse(output())).toMatchObject({ status: "sent" });
+  });
+
+  it("send fails closed when the API key does not belong to the selected project", async () => {
+    process.env.MGM_API_KEY = "mgm_proj_wrong_secret";
+    vi.mocked(client.listApiKeys).mockResolvedValue({
+      api_keys: [{ id: "k_1", name: "Development", key_prefix: "mgm_proj_abc123", revoked_at: null }],
+    });
+
+    await expect(
+      run(program, "events", "send", "{\"name\":\"test_event\"}", "--project", "p_1"),
+    ).rejects.toThrow("does not match an active API key");
+    expect(client.sendEvents).not.toHaveBeenCalled();
+  });
+
+  it("send rejects a revoked key even when its prefix matches the selected project", async () => {
+    process.env.MGM_API_KEY = "mgm_proj_revoked_secret";
+    vi.mocked(client.listApiKeys).mockResolvedValue({
+      api_keys: [{
+        id: "k_1",
+        name: "Revoked",
+        key_prefix: "mgm_proj_revoked",
+        revoked_at: "2026-10-10T12:00:00Z",
+      }],
+    });
+
+    await expect(
+      run(program, "events", "send", "{\"name\":\"test_event\"}", "--project", "p_1"),
+    ).rejects.toThrow("does not match an active API key");
+    expect(client.sendEvents).not.toHaveBeenCalled();
   });
 });
 
