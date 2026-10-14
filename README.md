@@ -68,6 +68,80 @@ mgm queries execute \
   --project prj_123
 ```
 
+### Query definition
+
+`--metric`, `--group-by`, `--breakdown-by`, `--granularity`, `--range`,
+`--events`, `--platforms`, `--environments`, and `--exclude-lifecycle-events`
+cover the common cases. `--definition` takes the same object those flags build
+and is the only way to reach country/region/city filters and custom property
+operators. Explicit flags override keys in `--definition`.
+
+```jsonc
+{
+  "metric": "unique_users",          // count_events, unique_users, unique_sessions, dau
+  "event_filter": ["purchase"],      // event names to count
+  "group_by": "date",                // dimension below, or "prop:<name>"
+  "breakdown_by": "platform",        // second dimension; only when group_by is "date"
+  "granularity": "day",              // day, week, month; only when group_by is "date"
+  "date_range": "30d",               // see below
+  "exclude_lifecycle_events": true,  // drop auto-tracked $ events
+  "filters": { "platforms": ["iOS"] }
+}
+```
+
+Dimensions for `group_by` and `breakdown_by`: `date` (`group_by` only),
+`platform`, `app_version`, `app_build_number`, `os_version`, `environment`,
+`device_manufacturer`, `locale`, `timezone`, `country`, `region`, `city`,
+`event_name`, or `prop:<property_name>`.
+
+Date ranges: `1d`, `7d`, `30d`, `90d`, `365d`,
+`custom:YYYY-MM-DD:YYYY-MM-DD`, or seasonal forms `month:11`, `months:11,12`,
+`quarter:4`, `quarters:1,4`, `compare:month:11`, `compare:quarter:4`,
+`compare:wow:4`.
+
+#### filters
+
+A flat object. Dimension keys are `platforms`, `event_names`, `environments`,
+`app_versions`, `countries`, `regions`, and `cities`; the singular spellings
+`environment`, `app_version`, `country`, `region`, and `city` mean the same
+thing. Each takes a string or an array of strings. Values inside one key are
+OR'd; separate keys are AND'd. Run `mgm dashboard filters` to see the values a
+project actually has.
+
+Custom properties use a `prop:<name>` key:
+
+```jsonc
+"prop:plan": "pro"                               // shorthand for IN ["pro"]
+"prop:plan": ["pro", "team"]                     // IN
+"prop:plan": { "op": "neq", "value": "free" }    // one clause
+"prop:revenue": { "op": "gt", "type": "number", "value": 100 }
+"prop:plan": [                                   // several clauses, OR'd
+  { "op": "contains", "value": "ent" },
+  { "op": "is_set" }
+]
+```
+
+A clause takes `op` (default `eq`), `type` (`string` default, `number`,
+`boolean`, `datetime`, `enum`), and `value` or `values`. Operators depend on
+`type`:
+
+| `type` | Operators |
+| --- | --- |
+| any | `is_set`, `is_not_set` |
+| `string`, `enum` | `eq`, `neq`, `in`, `not_in`, `contains`, `not_contains`, `starts_with`, `ends_with` |
+| `number` | `eq`, `neq`, `in`, `not_in`, `gt`, `gte`, `lt`, `lte`, `between` |
+| `boolean` | `eq` |
+| `datetime` | `before`, `after`, `on_or_before`, `on_or_after`, `between` |
+
+Set `type` when you want numeric or chronological comparison; the default
+`string` compares lexically. `in`, `not_in`, and `between` read `values`.
+Clauses within one `prop:` key are OR'd; different `prop:` keys are AND'd.
+
+Funnel steps are a different shape. `mgm funnels create --steps` takes
+comma-separated event names; per-step property filters use
+`{"property": ..., "op": ..., "value": ...}` with the smaller operator set
+`eq`, `neq`, `contains`, `not_contains`, `gt`, `gte`, `lt`, `lte`.
+
 ### Manage saved analysis
 
 ```bash

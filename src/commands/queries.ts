@@ -66,12 +66,15 @@ function buildQueryDefinition(
 
 function addAdvancedQueryOptions(command: Command): Command {
   return command
-    .option("--breakdown-by <field>", "Split a date series into multiple lines")
-    .option("--granularity <value>", "Date granularity (day, week, month)")
-    .option("--platforms <values>", "Comma-separated platform filters")
-    .option("--environments <values>", "Comma-separated environment filters")
-    .option("--exclude-lifecycle-events", "Exclude automatic lifecycle events")
-    .option("--definition <json>", "Full query definition JSON; explicit flags override it");
+    .option("--breakdown-by <field>", "Second dimension for a date series; same values as --group-by except date")
+    .option("--granularity <value>", "Date bucket: day, week, or month. Requires --group-by date")
+    .option("--platforms <values>", "Comma-separated platforms to include; see `mgm dashboard filters`")
+    .option("--environments <values>", "Comma-separated environments to include; see `mgm dashboard filters`")
+    .option("--exclude-lifecycle-events", "Drop the SDK's auto-tracked $ events such as $app_opened")
+    .option(
+      "--definition <json>",
+      "Full query definition JSON. The only way to set country/region/city filters and prop:<name> operator filters; see the Query definition section of the README. Explicit flags override it",
+    );
 }
 
 export function registerQueriesCommands(program: Command): void {
@@ -109,11 +112,11 @@ export function registerQueriesCommands(program: Command): void {
     .command("create")
     .description("Create a saved query")
     .requiredOption("--name <name>", "Query name")
-    .option("--metric <metric>", "Metric (e.g. unique_users, count_events)")
-    .option("--group-by <field>", "Group by field (e.g. date, event_name)")
-    .option("--events <names>", "Comma-separated event names to include")
-    .option("--range <range>", "Date range (e.g. 30d)")
-    .option("--visualization <type>", "Chart type (line, bar, table)")
+    .option("--metric <metric>", "count_events, unique_users, unique_sessions, or dau")
+    .option("--group-by <field>", "Dimension: date, platform, app_version, os_version, environment, country, region, city, locale, timezone, device_manufacturer, event_name, or prop:<name>")
+    .option("--events <names>", "Comma-separated event names to count; see `mgm events types`")
+    .option("--range <range>", "1d, 7d, 30d, 90d, 365d, or custom:YYYY-MM-DD:YYYY-MM-DD. Defaults to 30d")
+    .option("--visualization <type>", "line, bar, pie, doughnut, table, or number. Defaults to line")
     .option("--project <id>", "Project ID")
     .option("--json", "Output as JSON"))
     .action(async (opts: {
@@ -176,11 +179,11 @@ export function registerQueriesCommands(program: Command): void {
     .description("Update a saved query")
     .argument("<id>", "Query ID")
     .option("--name <name>", "Query name")
-    .option("--metric <metric>", "Metric")
-    .option("--group-by <field>", "Group by field")
-    .option("--events <names>", "Comma-separated event names to include")
-    .option("--range <range>", "Date range")
-    .option("--visualization <type>", "Chart type")
+    .option("--metric <metric>", "count_events, unique_users, unique_sessions, or dau")
+    .option("--group-by <field>", "Dimension to group by, or prop:<name>")
+    .option("--events <names>", "Comma-separated event names to count; see `mgm events types`")
+    .option("--range <range>", "1d, 7d, 30d, 90d, 365d, or custom:YYYY-MM-DD:YYYY-MM-DD")
+    .option("--visualization <type>", "line, bar, pie, doughnut, table, or number")
     .option("--project <id>", "Project ID")
     .option("--json", "Output as JSON"))
     .action(async (id: string, opts: {
@@ -215,10 +218,10 @@ export function registerQueriesCommands(program: Command): void {
     .command("execute")
     .description("Execute a saved or ad-hoc query")
     .argument("[id]", "Query ID (omit for ad-hoc)")
-    .option("--metric <metric>", "Metric (ad-hoc)")
-    .option("--group-by <field>", "Group by field (ad-hoc)")
-    .option("--events <names>", "Comma-separated event names to include")
-    .option("--range <range>", "Date range")
+    .option("--metric <metric>", "Ad-hoc runs: count_events, unique_users, unique_sessions, or dau")
+    .option("--group-by <field>", "Ad-hoc runs: dimension to group by, or prop:<name>")
+    .option("--events <names>", "Comma-separated event names to count; see `mgm events types`")
+    .option("--range <range>", "1d, 7d, 30d, 90d, 365d, or custom:YYYY-MM-DD:YYYY-MM-DD")
     .option("--project <id>", "Project ID")
     .option("--json", "Output as JSON"))
     .action(async (id: string | undefined, opts: {
