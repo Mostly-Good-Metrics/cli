@@ -138,10 +138,8 @@ Set `type` when you want numeric or chronological comparison; the default
 Clauses within one `prop:` key are OR'd; different `prop:` keys are AND'd.
 
 A `prop:` filter is answered from raw events rather than daily aggregates, so
-it is slower than a dimension filter. Identity metrics (`unique_users`,
-`unique_sessions`, `dau`) combined with a `prop:` filter are capped at 90
-days and return `unavailable` beyond that — narrow the date range, or use
-`count_events`.
+it is slower than a dimension filter. Prefer a dimension filter when one
+covers what you need.
 
 Funnel steps are a different shape. `mgm funnels create --steps` takes
 comma-separated event names; per-step property filters use
