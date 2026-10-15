@@ -137,6 +137,10 @@ Set `type` when you want numeric or chronological comparison; the default
 `string` compares lexically. `in`, `not_in`, and `between` read `values`.
 Clauses within one `prop:` key are OR'd; different `prop:` keys are AND'd.
 
+A `prop:` filter is answered from raw events rather than daily aggregates, so
+it is slower than a dimension filter. Prefer a dimension filter when one
+covers what you need.
+
 Funnel steps are a different shape. `mgm funnels create --steps` takes
 comma-separated event names; per-step property filters use
 `{"property": ..., "op": ..., "value": ...}` with the smaller operator set
