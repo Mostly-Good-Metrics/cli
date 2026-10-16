@@ -2,14 +2,60 @@ name: Release
 
 on:
   push:
+    branches: [main]
     tags:
       - "v*"
 
 jobs:
+  # Publishing used to require a `v*` tag pushed by hand. Twice the version in
+  # package.json was bumped and merged without one, so 0.1.2 and 0.1.3 were
+  # never published and nobody noticed until someone asked. This job makes a
+  # merged version bump sufficient; the tag is still honoured for an explicit
+  # release.
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.check.outputs.publish }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+      - id: check
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "Tag push for v$version"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          previous="$(git show HEAD~1:package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version" 2>/dev/null || echo "")"
+          if [ "$version" = "$previous" ]; then
+            echo "Version unchanged at $version; nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Guard against republishing a version that already exists, which
+          # npm rejects and which would fail the run for no reason.
+          if npm view "@mostly-good-metrics/cli@$version" version >/dev/null 2>&1; then
+            echo "Version $version is already on npm; nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Version changed ${previous:-none} -> $version"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
   publish:
+    needs: decide
+    if: needs.decide.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v6
@@ -26,3 +72,10 @@ jobs:
         run: npm test
       - name: Publish to npm
         run: npm publish --access public
+      - name: Tag the release
+        if: github.ref_type != 'tag'
+        env:
+          VERSION: ${{ needs.decide.outputs.version }}
+        run: |
+          git tag "v$VERSION"
+          git push origin "v$VERSION"

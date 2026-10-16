@@ -274,14 +274,31 @@ CI runs the build, tests, and a CLI smoke test on Node 20 and 22 for every pull 
 
 ## Releasing
 
-Publishing is automated through npm trusted publishing. Create a version bump commit, then tag and push it:
+Publishing is automated through npm trusted publishing. **Bumping the version
+in `package.json` and merging to `main` is enough** — the release workflow
+publishes and creates the matching `v*` tag for you.
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+npm version patch --no-git-tag-version   # or minor / major
+# commit, open a PR, merge
 ```
 
-The [`release.yml`](.github/workflows/release.yml) workflow builds, tests, and publishes from GitHub Actions using OIDC—no long-lived npm token is stored in the repository. npm automatically attaches provenance to trusted-publisher releases.
+Keep `VERSION` in `src/program.ts` in step with `package.json`; `npm version`
+does not update it, and a test fails if the two disagree. `npm version` is the
+easiest way to get `package-lock.json` updated too.
+
+Pushing a `v*` tag by hand still works and publishes the version currently in
+`package.json`.
+
+The [`release.yml`](.github/workflows/release.yml) workflow builds, tests, and
+publishes from GitHub Actions using OIDC—no long-lived npm token is stored in
+the repository. npm automatically attaches provenance to trusted-publisher
+releases. It skips publishing when the version has not changed or is already
+on npm, so an ordinary merge to `main` does nothing.
+
+> Before this was automated, a bump could be merged without a tag and simply
+> never ship. That happened to 0.1.2 and 0.1.3, which exist in git history but
+> never reached npm.
 
 ## License
 
