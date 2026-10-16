@@ -15,7 +15,7 @@ import { registerDiscoveryCommands } from "./commands/discovery.js";
 import { registerSkillsCommands } from "./commands/skills.js";
 import { configureRuntimeOptions } from "./runtime.js";
 
-export const VERSION = "0.1.3";
+export const VERSION = "0.1.4";
 
 export function buildProgram(): Command {
   const program = new Command();
