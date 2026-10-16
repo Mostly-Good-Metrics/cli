@@ -53,6 +53,7 @@ describe("auth-required commands fail without a token", () => {
     [["funnels", "list", "--project", "p_1"], () => client.listFunnels],
     [["queries", "list", "--project", "p_1"], () => client.listInsights],
     [["widgets", "list", "--project", "p_1"], () => client.listWidgets],
+    [["goals", "list", "--project", "p_1"], () => client.listGoals],
   ];
 
   it.each(cases.map(([args, fn]) => [args.join(" "), args, fn] as const))(
@@ -898,6 +899,105 @@ describe("experiments", () => {
   });
 });
 
+describe("goals", () => {
+  const goal = {
+    id: "g_1",
+    project_id: "p_1",
+    source: { type: "event_count", event_name: "purchase" },
+    target_type: "reach",
+    target: 100,
+    window: { type: "rolling", days: 7 },
+    notify_on: "both" as const,
+    evaluation_status: "available" as const,
+    evaluation_error: null,
+    current_value: 42,
+    percent_complete: 42,
+    pace_line: { status: "ahead", text: "12% ahead" },
+    pace_line_text: "12% ahead",
+    projected_finish: "2026-10-10",
+    milestone_crossings: [25],
+    inserted_at: "2026-09-30T00:00:00Z",
+    updated_at: "2026-09-30T00:00:00Z",
+  };
+
+  it("lists live goal progress", async () => {
+    vi.mocked(client.listGoals).mockResolvedValue({ goals: [goal] });
+
+    await run(program, "goals", "list", "--project", "p_1");
+
+    expect(client.listGoals).toHaveBeenCalledWith("p_1");
+    expect(output()).toContain("42%");
+    expect(output()).toContain("12% ahead");
+  });
+
+  it("keeps unavailable goals visible without inventing progress", async () => {
+    const unavailable = {
+      ...goal,
+      id: "g_unavailable",
+      evaluation_status: "unavailable" as const,
+      evaluation_error: "saved_query_not_found",
+      current_value: null,
+      percent_complete: null,
+      pace_line: { status: "unavailable", text: "Progress unavailable" },
+      pace_line_text: "Progress unavailable",
+      projected_finish: null,
+      milestone_crossings: [],
+    };
+    vi.mocked(client.listGoals).mockResolvedValue({ goals: [goal, unavailable] });
+    vi.mocked(client.getGoal).mockResolvedValue({ goal: unavailable });
+
+    await run(program, "goals", "list", "--project", "p_1");
+    expect(output()).toContain("unavailable");
+    expect(output()).not.toContain("null%");
+
+    await run(program, "goals", "show", unavailable.id, "--project", "p_1");
+    expect(output()).toContain("Progress: unavailable");
+    expect(output()).toContain("Evaluation error: saved_query_not_found");
+  });
+
+  it("creates a flexible goal from JSON definitions", async () => {
+    vi.mocked(client.createGoal).mockResolvedValue({ goal });
+
+    await run(
+      program,
+      "goals", "create",
+      "--source", '{"type":"event_count","event_name":"purchase"}',
+      "--target-type", "reach",
+      "--target", "100",
+      "--window", '{"type":"rolling","days":7}',
+      "--notify-on", "milestone",
+      "--project", "p_1",
+    );
+
+    expect(client.createGoal).toHaveBeenCalledWith("p_1", {
+      source: { type: "event_count", event_name: "purchase" },
+      target_type: "reach",
+      target: 100,
+      window: { type: "rolling", days: 7 },
+      notify_on: "milestone",
+    });
+    expect(output()).toContain("Goal created");
+  });
+
+  it("shows one goal and rejects invalid JSON", async () => {
+    vi.mocked(client.getGoal).mockResolvedValue({ goal });
+
+    await run(program, "goals", "show", "g_1", "--project", "p_1");
+    expect(client.getGoal).toHaveBeenCalledWith("p_1", "g_1");
+    expect(output()).toContain("Projected finish: 2026-10-10");
+
+    await expect(run(
+      program,
+      "goals", "create",
+      "--source", "[]",
+      "--target-type", "reach",
+      "--target", "100",
+      "--window", '{"type":"rolling","days":7}',
+      "--project", "p_1",
+    )).rejects.toThrow("--source must be a JSON object");
+  });
+});
+
 describe("widgets", () => {
   it("list prints widgets", async () => {
     vi.mocked(client.listWidgets).mockResolvedValue({
@@ -990,6 +1090,7 @@ describe("parsing", () => {
 
     const commands = JSON.parse(output()) as { path: string; options: { flags: string }[] }[];
     expect(commands.some((command) => command.path === "experiments update")).toBe(true);
+    expect(commands.some((command) => command.path === "goals create")).toBe(true);
     expect(commands.some((command) => command.path === "dashboard filters")).toBe(true);
   });
 
