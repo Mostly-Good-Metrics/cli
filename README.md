@@ -171,6 +171,27 @@ mgm experiments results exp_123
 mgm experiments stop exp_123 --yes
 ```
 
+### Track goals
+
+Goals are in limited preview and are available only to organizations with the
+`goals` feature enabled.
+
+```bash
+mgm goals create \
+  --name "Reach 1,000 purchases" \
+  --source '{"type":"event_count","event_name":"purchase"}' \
+  --shape reach \
+  --goal '{"value":1000}' \
+  --window '{"type":"deadline","start_date":"2026-10-01","deadline":"2026-10-31"}'
+
+mgm goals list
+mgm goals show <goal-id>
+```
+
+`mgm goals list` reads bounded live snapshots. `mgm goals show` reads the stored
+goal definition and its `/snapshot` endpoint. Unavailable data remains marked
+unavailable instead of being shown as zero.
+
 ### Manage access and dashboards
 
 ```bash
@@ -247,7 +268,7 @@ Run `mgm <command> --help` for flags and examples. The main command groups are:
 | Organizations and projects | `orgs`, `projects`, `init` |
 | Credentials | `keys` |
 | Product data | `dashboard`, `events`, `widgets` |
-| Analysis | `funnels`, `retention`, `queries` |
+| Analysis | `funnels`, `retention`, `queries`, `goals` |
 | Experiments | `experiments` |
 | Discovery | `commands`, `schema` |
 
