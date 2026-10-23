@@ -232,6 +232,24 @@ export const startExperiment = (projectId: string, id: string) =>
 export const stopExperiment = (projectId: string, id: string) =>
   request<{ experiment: Experiment }>("POST", `/projects/${projectId}/experiments/${id}/stop`);
 
+// Goals
+export const listGoals = (projectId: string) =>
+  request<{ goals: Goal[] }>("GET", `/projects/${projectId}/goals`);
+
+export const listGoalSnapshots = (projectId: string) =>
+  request<{ goals: GoalSnapshot[] }>("GET", `/projects/${projectId}/goals`, {
+    params: { snapshots: "true" },
+  });
+
+export const getGoal = (projectId: string, id: string) =>
+  request<{ goal: Goal }>("GET", `/projects/${projectId}/goals/${id}`);
+
+export const getGoalSnapshot = (projectId: string, id: string) =>
+  request<{ snapshot: GoalSnapshot }>("GET", `/projects/${projectId}/goals/${id}/snapshot`);
+
+export const createGoal = (projectId: string, attrs: Record<string, unknown>) =>
+  request<{ goal: Goal }>("POST", `/projects/${projectId}/goals`, { body: attrs });
+
 // Widgets
 export const listWidgets = (projectId: string) =>
   request<{ widgets: Widget[] }>("GET", `/projects/${projectId}/widgets`);
@@ -359,6 +377,40 @@ export interface Experiment {
   variants: string[];
   goal_event: string;
   status?: string;
+}
+
+export interface Goal {
+  id: string;
+  name: string;
+  source: Record<string, unknown>;
+  window: Record<string, unknown>;
+  shape: "reach" | "growth" | "streak" | "threshold";
+  goal: Record<string, unknown>;
+  starts_on: string | null;
+  ends_on: string | null;
+  enabled: boolean;
+  following: boolean;
+  reached_on: string | null;
+  description: string;
+  inserted_at: string;
+  updated_at: string;
+}
+
+export interface GoalSnapshot {
+  goal_id: string;
+  name: string;
+  shape: Goal["shape"];
+  enabled: boolean;
+  value: number | null;
+  baseline: number | null;
+  progress: number | null;
+  pace: Record<string, unknown> | null;
+  projected_finish: { date?: string; assumption?: Record<string, unknown> } | null;
+  status: string;
+  milestones: { reached: number[]; crossed: number[] };
+  as_of: string;
+  availability: "available" | "unavailable" | "timeout" | "not_started";
+  unavailable_reason: string | null;
 }
 
 export interface Widget {

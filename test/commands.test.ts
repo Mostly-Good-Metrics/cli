@@ -53,6 +53,7 @@ describe("auth-required commands fail without a token", () => {
     [["funnels", "list", "--project", "p_1"], () => client.listFunnels],
     [["queries", "list", "--project", "p_1"], () => client.listInsights],
     [["widgets", "list", "--project", "p_1"], () => client.listWidgets],
+    [["goals", "list", "--project", "p_1"], () => client.listGoalSnapshots],
   ];
 
   it.each(cases.map(([args, fn]) => [args.join(" "), args, fn] as const))(
@@ -898,6 +899,124 @@ describe("experiments", () => {
   });
 });
 
+describe("goals", () => {
+  const goal = {
+    id: "g_1",
+    name: "Reach 100 purchases",
+    source: { type: "event_count", event_name: "purchase" },
+    window: { type: "rolling", days: 7 },
+    shape: "reach" as const,
+    goal: { value: 100 },
+    starts_on: null,
+    ends_on: null,
+    enabled: true,
+    following: true,
+    reached_on: null,
+    description: "Reach 100 event count over a rolling 7-day window",
+    inserted_at: "2026-09-30T00:00:00Z",
+    updated_at: "2026-09-30T00:00:00Z",
+  };
+
+  const snapshot = {
+    goal_id: "g_1",
+    name: goal.name,
+    shape: goal.shape,
+    enabled: true,
+    value: 42,
+    baseline: 20,
+    progress: 42,
+    pace: { actual_per_day: 6, required_per_day: 8 },
+    projected_finish: { date: "2026-10-10", assumption: { method: "linear_run_rate" } },
+    status: "ahead",
+    milestones: { reached: [25], crossed: [25] },
+    as_of: "2026-10-01",
+    availability: "available" as const,
+    unavailable_reason: null,
+  };
+
+  it("lists live goal progress", async () => {
+    vi.mocked(client.listGoalSnapshots).mockResolvedValue({ goals: [snapshot] });
+
+    await run(program, "goals", "list", "--project", "p_1");
+
+    expect(client.listGoalSnapshots).toHaveBeenCalledWith("p_1");
+    expect(output()).toContain("42%");
+    expect(output()).toContain("ahead");
+  });
+
+  it("keeps unavailable goals visible without inventing progress", async () => {
+    const unavailable = {
+      ...snapshot,
+      goal_id: "g_unavailable",
+      value: null,
+      progress: null,
+      pace: null,
+      status: "neutral",
+      projected_finish: null,
+      milestones: { reached: [], crossed: [] },
+      availability: "unavailable" as const,
+      unavailable_reason: "saved_query_not_found",
+    };
+    vi.mocked(client.listGoalSnapshots).mockResolvedValue({ goals: [snapshot, unavailable] });
+    vi.mocked(client.getGoal).mockResolvedValue({ goal: { ...goal, id: unavailable.goal_id } });
+    vi.mocked(client.getGoalSnapshot).mockResolvedValue({ snapshot: unavailable });
+
+    await run(program, "goals", "list", "--project", "p_1");
+    expect(output()).toContain("unavailable");
+    expect(output()).not.toContain("null%");
+
+    await run(program, "goals", "show", unavailable.goal_id, "--project", "p_1");
+    expect(output()).toContain("Progress: unavailable");
+    expect(output()).toContain("Unavailable reason: saved_query_not_found");
+  });
+
+  it("creates a flexible goal from JSON definitions", async () => {
+    vi.mocked(client.createGoal).mockResolvedValue({ goal });
+
+    await run(
+      program,
+      "goals", "create",
+      "--name", "Reach 100 purchases",
+      "--source", '{"type":"event_count","event_name":"purchase"}',
+      "--shape", "reach",
+      "--goal", '{"value":100}',
+      "--window", '{"type":"rolling","days":7}',
+      "--project", "p_1",
+    );
+
+    expect(client.createGoal).toHaveBeenCalledWith("p_1", {
+      name: "Reach 100 purchases",
+      source: { type: "event_count", event_name: "purchase" },
+      shape: "reach",
+      goal: { value: 100 },
+      window: { type: "rolling", days: 7 },
+      enabled: true,
+    });
+    expect(output()).toContain("Goal created");
+  });
+
+  it("shows one goal and rejects invalid JSON", async () => {
+    vi.mocked(client.getGoal).mockResolvedValue({ goal });
+    vi.mocked(client.getGoalSnapshot).mockResolvedValue({ snapshot });
+
+    await run(program, "goals", "show", "g_1", "--project", "p_1");
+    expect(client.getGoal).toHaveBeenCalledWith("p_1", "g_1");
+    expect(client.getGoalSnapshot).toHaveBeenCalledWith("p_1", "g_1");
+    expect(output()).toContain("Projected finish: 2026-10-10");
+
+    await expect(run(
+      program,
+      "goals", "create",
+      "--name", "Reach 100 purchases",
+      "--source", "[]",
+      "--shape", "reach",
+      "--goal", '{"value":100}',
+      "--window", '{"type":"rolling","days":7}',
+      "--project", "p_1",
+    )).rejects.toThrow("--source must be a JSON object");
+  });
+});
+
 describe("widgets", () => {
   it("list prints widgets", async () => {
     vi.mocked(client.listWidgets).mockResolvedValue({
@@ -990,6 +1109,7 @@ describe("parsing", () => {
 
     const commands = JSON.parse(output()) as { path: string; options: { flags: string }[] }[];
     expect(commands.some((command) => command.path === "experiments update")).toBe(true);
+    expect(commands.some((command) => command.path === "goals create")).toBe(true);
     expect(commands.some((command) => command.path === "dashboard filters")).toBe(true);
   });
 

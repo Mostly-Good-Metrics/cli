@@ -128,6 +128,32 @@ describe("API client", () => {
     expect(lastRequest(fetchMock).url).toBe(`${BASE}/projects/p_1/widgets`);
   });
 
+  it("hits goal list, snapshot, show, and create endpoints with goal keys", async () => {
+    const fetchMock = mockFetch({ json: { goals: [] } });
+
+    await client.listGoals("p_1");
+    expect(lastRequest(fetchMock).url).toBe(`${BASE}/projects/p_1/goals`);
+
+    fetchMock.mockClear();
+    await client.listGoalSnapshots("p_1");
+    expect(lastRequest(fetchMock).url).toBe(`${BASE}/projects/p_1/goals?snapshots=true`);
+
+    fetchMock.mockClear();
+    await client.getGoal("p_1", "g_1");
+    expect(lastRequest(fetchMock).url).toBe(`${BASE}/projects/p_1/goals/g_1`);
+
+    fetchMock.mockClear();
+    await client.getGoalSnapshot("p_1", "g_1");
+    expect(lastRequest(fetchMock).url).toBe(`${BASE}/projects/p_1/goals/g_1/snapshot`);
+
+    fetchMock.mockClear();
+    await client.createGoal("p_1", { goal: { value: 100 } });
+    const { url, init } = lastRequest(fetchMock);
+    expect(url).toBe(`${BASE}/projects/p_1/goals`);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ goal: { value: 100 } });
+  });
+
   it("throws ApiError with server-provided code and message", async () => {
     mockFetch({
       status: 401,
