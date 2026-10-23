@@ -57,7 +57,7 @@ export function registerGoalsCommands(program: Command): void {
 
   goals
     .command("list")
-    .description("List goals with live progress and pace")
+    .description("List goals with live progress and status")
     .option("--project <id>", "Project ID")
     .option("--json", "Output as JSON")
     .action(async (opts: { project?: string; json?: boolean }) => {

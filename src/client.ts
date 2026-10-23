@@ -409,7 +409,7 @@ export interface GoalSnapshot {
   status: string;
   milestones: { reached: number[]; crossed: number[] };
   as_of: string;
-  availability: "available" | "unavailable" | "timeout" | "not_started";
+  availability: "available" | "unavailable" | "timeout" | "not_started" | "disabled";
   unavailable_reason: string | null;
 }
 
