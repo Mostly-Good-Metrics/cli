@@ -1,14 +1,14 @@
 import { getToken } from "./auth.js";
 
 const BASE_URL = process.env.MGM_API_URL ?? "https://api.mostlygoodmetrics.com/api/v2";
-const INGEST_EVENTS_URL = process.env.MGM_INGEST_URL
-  ?? "https://ingest.mostlygoodmetrics.com/v1/events";
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     public code: string,
     message: string,
+    public details?: unknown,
+    public retryAfter?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -43,12 +43,21 @@ async function request<T>(
   if (!res.ok) {
     let code = "unknown";
     let message = `HTTP ${res.status}`;
+    let details: unknown;
+    let retryAfter: number | undefined;
     try {
-      const err = (await res.json()) as { error?: string; message?: string };
+      const err = (await res.json()) as {
+        error?: string;
+        message?: string;
+        details?: unknown;
+        retry_after?: number;
+      };
       code = err.error ?? code;
       message = err.message ?? message;
+      details = err.details;
+      retryAfter = err.retry_after;
     } catch {}
-    throw new ApiError(res.status, code, message);
+    throw new ApiError(res.status, code, message, details, retryAfter);
   }
 
   if (res.status === 204) return {} as T;
@@ -148,73 +157,20 @@ export const createEventDefinition = (projectId: string, attrs: Record<string, u
 
 export async function sendTestEvent(
   projectId: string,
-  event: Record<string, unknown>,
-): Promise<void> {
-  let temporaryKey: (ApiKey & { key: string }) | undefined;
-  let sendError: unknown;
-
+  event?: Record<string, unknown>,
+): Promise<{ event: TestEvent }> {
   try {
-    let data: { api_key: ApiKey & { key: string } };
-    try {
-      data = await createApiKey(projectId, "CLI test event", {
-        environment: "development",
-        allowedIdentifiers: ["localhost"],
-      });
-    } catch (error) {
-      throw temporaryKeySetupError(error, projectId);
-    }
-    temporaryKey = data.api_key;
-
-    if (!temporaryKey.id
-      || !temporaryKey.key
-      || temporaryKey.environment !== "development"
-      || temporaryKey.allowed_identifiers?.length !== 1
-      || temporaryKey.allowed_identifiers[0] !== "localhost") {
-      throw new ApiError(
-        422,
-        "temporary_key_invalid",
-        "The API did not return the requested restricted development key.",
-      );
-    }
-
-    const res = await fetch(INGEST_EVENTS_URL, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${temporaryKey.key}`,
-        "X-MGM-SDK": "cli",
-        "X-MGM-Platform": "cli",
-      },
-      body: JSON.stringify({ events: [event] }),
-    });
-
-    if (!res.ok) {
-      const detail = await ingestionErrorDetail(res);
-      throw ingestionError(res.status, detail);
-    }
+    return await request<{ event: TestEvent }>(
+      "POST",
+      `/projects/${projectId}/events/test`,
+      event ? { body: { event } } : {},
+    );
   } catch (error) {
-    sendError = error;
+    throw testEventError(error, projectId);
   }
-
-  if (temporaryKey && typeof temporaryKey.id === "string") {
-    try {
-      await revokeApiKey(projectId, temporaryKey.id);
-    } catch (cleanupError) {
-      const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : "unknown error";
-      const prefix = sendError instanceof Error ? `${sendError.message} ` : "";
-      throw new ApiError(
-        500,
-        "temporary_key_cleanup_failed",
-        `${prefix}The temporary API key could not be revoked (${cleanupMessage}). Revoke key ${temporaryKey.id} with: mgm keys revoke ${temporaryKey.id} --project ${projectId}`,
-      );
-    }
-  }
-
-  if (sendError) throw sendError;
 }
 
-function temporaryKeySetupError(error: unknown, projectId: string): unknown {
+function testEventError(error: unknown, projectId: string): unknown {
   if (!(error instanceof ApiError)) return error;
 
   switch (error.status) {
@@ -222,43 +178,30 @@ function temporaryKeySetupError(error: unknown, projectId: string): unknown {
       return new ApiError(401, "unauthorized", "Authentication expired. Run `mgm login` again.");
     case 403:
       return new ApiError(403, "forbidden", `You do not have permission to send events to project ${projectId}.`);
-    case 400:
+    case 404:
+      return new ApiError(404, "not_found", `Project ${projectId} was not found.`);
     case 422:
-      return new ApiError(error.status, "temporary_key_rejected", `The API could not create a temporary project key: ${error.message}`);
+      return new ApiError(422, "validation_failed", `Event is invalid${formatEventDetails(error.details)}.`);
+    case 429:
+      return new ApiError(
+        429,
+        "rate_limited",
+        error.retryAfter === undefined
+          ? "Test event rate limit exceeded. Try again later."
+          : `Test event rate limit exceeded. Retry after ${error.retryAfter} seconds.`,
+      );
+    case 500:
+      return new ApiError(500, "internal_error", "The test event could not be stored. Try again later.");
     default:
       return error;
   }
 }
 
-async function ingestionErrorDetail(res: Response): Promise<string | undefined> {
-  try {
-    const body = await res.text();
-    if (!body) return undefined;
-    try {
-      const parsed = JSON.parse(body) as { error?: unknown; message?: unknown; details?: unknown };
-      const detail = parsed.message ?? parsed.details ?? parsed.error;
-      return typeof detail === "string" ? detail : JSON.stringify(detail);
-    } catch {
-      return body;
-    }
-  } catch {
-    return undefined;
-  }
-}
-
-function ingestionError(status: number, detail?: string): ApiError {
-  const suffix = detail ? `: ${detail}` : ".";
-  switch (status) {
-    case 401:
-      return new ApiError(status, "ingestion_unauthorized", `Ingestion rejected the temporary project API key${suffix}`);
-    case 403:
-      return new ApiError(status, "ingestion_forbidden", `Ingestion denied this test event for the selected project${suffix}`);
-    case 400:
-    case 422:
-      return new ApiError(status, "invalid_event", `Ingestion rejected the event payload${suffix}`);
-    default:
-      return new ApiError(status, "ingestion_failed", `Failed to send the test event (HTTP ${status})${detail ? `: ${detail}` : "."}`);
-  }
+function formatEventDetails(details: unknown): string {
+  if (details === null || typeof details !== "object") return "";
+  const eventDetails = (details as { event?: unknown }).event;
+  if (!Array.isArray(eventDetails) || eventDetails.length === 0) return "";
+  return `: ${eventDetails.map(String).join(", ")}`;
 }
 
 // Insights (Saved Queries)
@@ -458,6 +401,13 @@ export interface EventDefinition {
   description?: string;
   event_count?: number;
   first_seen_at?: string | null;
+}
+
+export interface TestEvent {
+  name: string;
+  client_event_id: string;
+  timestamp: string;
+  environment: "development";
 }
 
 export interface SavedQuery {

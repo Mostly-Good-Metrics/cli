@@ -1,5 +1,4 @@
 import { Command } from "commander";
-import { randomUUID } from "node:crypto";
 import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
@@ -12,14 +11,7 @@ export function prepareTestEvent(event: unknown): Record<string, unknown> {
   }
 
   const input = event as Record<string, unknown>;
-  return {
-    name: "cli_test_event",
-    timestamp: new Date().toISOString(),
-    client_event_id: randomUUID(),
-    platform: "cli",
-    environment: "development",
-    ...input,
-  };
+  return input;
 }
 
 export function registerEventsCommands(program: Command): void {
@@ -121,26 +113,32 @@ export function registerEventsCommands(program: Command): void {
 
   events
     .command("send")
-    .description("Send a test event using a temporary project API key")
-    .argument("[event]", "Event JSON", '{"name":"cli_test_event"}')
+    .description("Send a development-tagged event; it counts unless dashboards filter by environment")
+    .argument(
+      "[event]",
+      "Event JSON; omitted defaults to cli_test_event",
+    )
     .option("--project <id>", "Project ID")
     .option("--json", "Output as JSON")
-    .action(async (eventJson: string, opts: { project?: string; json?: boolean }) => {
+    .action(async (eventJson: string | undefined, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
 
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(eventJson);
-      } catch {
-        throw new CliUsageError("Invalid event JSON. Example: '{\"name\":\"test_event\"}'");
+      let event: Record<string, unknown> | undefined;
+      if (eventJson !== undefined) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(eventJson);
+        } catch {
+          throw new CliUsageError("Invalid event JSON. Example: '{\"name\":\"test_event\"}'");
+        }
+        event = prepareTestEvent(parsed);
       }
-      const event = prepareTestEvent(parsed);
 
-      await client.sendTestEvent(projectId, event);
+      const data = await client.sendTestEvent(projectId, event);
 
       if (opts.json) {
-        output.json({ status: "sent", event });
+        output.json({ status: "sent", event: data.event });
         return;
       }
       console.log("Event sent.");

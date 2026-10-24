@@ -630,26 +630,31 @@ describe("events", () => {
     expect(output()).toContain("No analytics event was sent");
   });
 
-  it("send selects the requested project and supplies SDK-shaped defaults", async () => {
-    vi.mocked(client.sendTestEvent).mockResolvedValue();
+  it("send selects the requested project and supplies the default event name", async () => {
+    vi.mocked(client.sendTestEvent).mockResolvedValue({
+      event: {
+        name: "cli_test_event",
+        client_event_id: "event-id",
+        timestamp: "2026-10-24T12:00:00Z",
+        environment: "development",
+      },
+    });
 
     await run(program, "events", "send", "--project", "p_selected");
 
-    expect(client.sendTestEvent).toHaveBeenCalledOnce();
-    const [projectId, event] = vi.mocked(client.sendTestEvent).mock.calls[0];
-    expect(projectId).toBe("p_selected");
-    expect(event).toMatchObject({
-      name: "cli_test_event",
-      platform: "cli",
-      environment: "development",
-    });
-    expect(event.timestamp).toEqual(expect.any(String));
-    expect(event.client_event_id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(client.sendTestEvent).toHaveBeenCalledWith("p_selected", undefined);
     expect(output()).toContain("Event sent.");
   });
 
-  it("send preserves explicit event fields while filling omitted contract fields", async () => {
-    vi.mocked(client.sendTestEvent).mockResolvedValue();
+  it("send passes explicit fields unchanged and prints the server response as JSON", async () => {
+    vi.mocked(client.sendTestEvent).mockResolvedValue({
+      event: {
+        name: "checkout_test",
+        client_event_id: "event-id",
+        timestamp: "2026-10-24T12:00:00Z",
+        environment: "development",
+      },
+    });
 
     await run(
       program,
@@ -659,17 +664,19 @@ describe("events", () => {
       "--json",
     );
 
-    expect(client.sendTestEvent).toHaveBeenCalledWith("p_1", expect.objectContaining({
+    expect(client.sendTestEvent).toHaveBeenCalledWith("p_1", {
       name: "checkout_test",
       platform: "web",
-      environment: "development",
       properties: { safe: true },
-      timestamp: expect.any(String),
-      client_event_id: expect.any(String),
-    }));
-    expect(JSON.parse(output())).toMatchObject({
+    });
+    expect(JSON.parse(output())).toEqual({
       status: "sent",
-      event: { name: "checkout_test", platform: "web" },
+      event: {
+        name: "checkout_test",
+        client_event_id: "event-id",
+        timestamp: "2026-10-24T12:00:00Z",
+        environment: "development",
+      },
     });
   });
 
