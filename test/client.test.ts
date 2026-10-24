@@ -184,4 +184,105 @@ describe("API client", () => {
     const data = await client.deleteProject("p_1");
     expect(data).toEqual({});
   });
+
+  it("sends a test event with a temporary key for the selected project and revokes it", async () => {
+    const event = {
+      name: "cli_test_event",
+      timestamp: "2026-10-24T12:00:00.000Z",
+      client_event_id: "7d74f02f-293f-444f-9c6f-31b3e4b3e59e",
+      platform: "cli",
+      environment: "development",
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: vi.fn().mockResolvedValue({
+          api_key: {
+            id: "key_temp",
+            name: "CLI test event",
+            key: "mgm_proj_temporary",
+            environment: "development",
+            allowed_identifiers: ["localhost"],
+          },
+        }),
+      })
+      .mockResolvedValueOnce({ ok: true, status: 204 })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ revoked: true }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await client.sendTestEvent("p_selected", event);
+
+    const [createUrl, createInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(createUrl).toBe(`${BASE}/projects/p_selected/api-keys`);
+    expect(createInit.headers).toMatchObject({ Authorization: "Bearer stored-token" });
+    expect(JSON.parse(createInit.body as string)).toEqual({
+      name: "CLI test event",
+      environment: "development",
+      allowed_identifiers: ["localhost"],
+    });
+
+    const [ingestUrl, ingestInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(ingestUrl).toBe("https://ingest.mostlygoodmetrics.com/v1/events");
+    expect(ingestInit.method).toBe("POST");
+    expect(ingestInit.headers).toMatchObject({
+      Authorization: "Bearer mgm_proj_temporary",
+      "Content-Type": "application/json",
+      "X-MGM-SDK": "cli",
+      "X-MGM-Platform": "cli",
+    });
+    expect(JSON.parse(ingestInit.body as string)).toEqual({ events: [event] });
+
+    const [revokeUrl, revokeInit] = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect(revokeUrl).toBe(`${BASE}/projects/p_selected/api-keys/key_temp`);
+    expect(revokeInit.method).toBe("DELETE");
+  });
+
+  it.each([
+    [401, "ingestion_unauthorized", "rejected the temporary project API key"],
+    [403, "ingestion_forbidden", "denied this test event"],
+    [422, "invalid_event", "rejected the event payload"],
+  ] as const)("reports a clear %i ingestion error and still revokes the temporary key", async (
+    status,
+    code,
+    message,
+  ) => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: vi.fn().mockResolvedValue({
+          api_key: {
+            id: "key_temp",
+            key: "mgm_proj_temporary",
+            environment: "development",
+            allowed_identifiers: ["localhost"],
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status,
+        text: vi.fn().mockResolvedValue(JSON.stringify({ error: "backend detail" })),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ revoked: true }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const error = await client.sendTestEvent("p_selected", { name: "test" })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(client.ApiError);
+    expect(error).toMatchObject({ status, code });
+    expect((error as Error).message).toContain(message);
+    expect((error as Error).message).toContain("backend detail");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });

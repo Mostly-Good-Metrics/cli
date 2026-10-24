@@ -42,6 +42,10 @@ mgm dashboard --project prj_123 --range 7d
 mgm events types --project prj_123
 mgm events list --project prj_123 --range 7d
 
+# Send a development test event. The JSON argument is optional.
+mgm events send --project prj_123
+mgm events send '{"name":"checkout_test","properties":{"source":"cli"}}' --project prj_123
+
 # Define an event before it is first sent, so it is ready for funnels and dashboards.
 # This creates metadata only; it does not emit an analytics event.
 mgm events define checkout_completed \
@@ -256,7 +260,7 @@ mgm skills install --agent claude-code --skill instrument-my-app
 | `--no-input` | Fail instead of opening a browser or prompting. |
 | `-y`, `--yes` | Confirm destructive operations such as deletion, key revocation, widget reset, and stopping an experiment. |
 
-For scripts, use `MGM_TOKEN` rather than `mgm login --token`, because command-line arguments can be visible to other local processes. `MGM_API_URL` and `MGM_APP_URL` can point the CLI at a local development environment.
+For scripts, use `MGM_TOKEN` rather than `mgm login --token`, because command-line arguments can be visible to other local processes. `MGM_API_URL` and `MGM_APP_URL` can point the CLI at a local development environment. `MGM_INGEST_URL` can override the complete event-ingestion URL used by `mgm events send`.
 
 ## Command reference
 
@@ -278,7 +282,7 @@ Use `mgm commands --json` for the complete command tree, including all subcomman
 
 Interactive credentials are stored in the operating system credential store when available (macOS Keychain, Windows Credential Manager, or the Linux secret service). If no native store is available, the fallback config file is restricted to the current user.
 
-`mgm init` writes `.mgm.json` in the current directory with the selected project context. Treat API keys printed by `mgm keys create` as secrets and store them in your CI secret manager. Human-readable `mgm keys list` output reports only whether each key is restricted; use `--json` when you need the full identifier allowlist.
+`mgm init` writes `.mgm.json` in the current directory with the selected project context. Treat API keys printed by `mgm keys create` as secrets and store them in your CI secret manager. Human-readable `mgm keys list` output reports only whether each key is restricted; use `--json` when you need the full identifier allowlist. `mgm events send` creates a development API key restricted to local requests, sends the event through ingestion, and immediately revokes the key.
 
 ## Development
 

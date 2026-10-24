@@ -1,6 +1,8 @@
 import { getToken } from "./auth.js";
 
 const BASE_URL = process.env.MGM_API_URL ?? "https://api.mostlygoodmetrics.com/api/v2";
+const INGEST_EVENTS_URL = process.env.MGM_INGEST_URL
+  ?? "https://ingest.mostlygoodmetrics.com/v1/events";
 
 export class ApiError extends Error {
   constructor(
@@ -143,6 +145,121 @@ export const listEventDefinitions = (projectId: string) =>
 
 export const createEventDefinition = (projectId: string, attrs: Record<string, unknown>) =>
   request<{ definition: EventDefinition }>("POST", `/projects/${projectId}/events/definitions`, { body: attrs });
+
+export async function sendTestEvent(
+  projectId: string,
+  event: Record<string, unknown>,
+): Promise<void> {
+  let temporaryKey: (ApiKey & { key: string }) | undefined;
+  let sendError: unknown;
+
+  try {
+    let data: { api_key: ApiKey & { key: string } };
+    try {
+      data = await createApiKey(projectId, "CLI test event", {
+        environment: "development",
+        allowedIdentifiers: ["localhost"],
+      });
+    } catch (error) {
+      throw temporaryKeySetupError(error, projectId);
+    }
+    temporaryKey = data.api_key;
+
+    if (!temporaryKey.id
+      || !temporaryKey.key
+      || temporaryKey.environment !== "development"
+      || temporaryKey.allowed_identifiers?.length !== 1
+      || temporaryKey.allowed_identifiers[0] !== "localhost") {
+      throw new ApiError(
+        422,
+        "temporary_key_invalid",
+        "The API did not return the requested restricted development key.",
+      );
+    }
+
+    const res = await fetch(INGEST_EVENTS_URL, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${temporaryKey.key}`,
+        "X-MGM-SDK": "cli",
+        "X-MGM-Platform": "cli",
+      },
+      body: JSON.stringify({ events: [event] }),
+    });
+
+    if (!res.ok) {
+      const detail = await ingestionErrorDetail(res);
+      throw ingestionError(res.status, detail);
+    }
+  } catch (error) {
+    sendError = error;
+  }
+
+  if (temporaryKey && typeof temporaryKey.id === "string") {
+    try {
+      await revokeApiKey(projectId, temporaryKey.id);
+    } catch (cleanupError) {
+      const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : "unknown error";
+      const prefix = sendError instanceof Error ? `${sendError.message} ` : "";
+      throw new ApiError(
+        500,
+        "temporary_key_cleanup_failed",
+        `${prefix}The temporary API key could not be revoked (${cleanupMessage}). Revoke key ${temporaryKey.id} with: mgm keys revoke ${temporaryKey.id} --project ${projectId}`,
+      );
+    }
+  }
+
+  if (sendError) throw sendError;
+}
+
+function temporaryKeySetupError(error: unknown, projectId: string): unknown {
+  if (!(error instanceof ApiError)) return error;
+
+  switch (error.status) {
+    case 401:
+      return new ApiError(401, "unauthorized", "Authentication expired. Run `mgm login` again.");
+    case 403:
+      return new ApiError(403, "forbidden", `You do not have permission to send events to project ${projectId}.`);
+    case 400:
+    case 422:
+      return new ApiError(error.status, "temporary_key_rejected", `The API could not create a temporary project key: ${error.message}`);
+    default:
+      return error;
+  }
+}
+
+async function ingestionErrorDetail(res: Response): Promise<string | undefined> {
+  try {
+    const body = await res.text();
+    if (!body) return undefined;
+    try {
+      const parsed = JSON.parse(body) as { error?: unknown; message?: unknown; details?: unknown };
+      const detail = parsed.message ?? parsed.details ?? parsed.error;
+      return typeof detail === "string" ? detail : JSON.stringify(detail);
+    } catch {
+      return body;
+    }
+  } catch {
+    return undefined;
+  }
+}
+
+function ingestionError(status: number, detail?: string): ApiError {
+  const suffix = detail ? `: ${detail}` : ".";
+  switch (status) {
+    case 401:
+      return new ApiError(status, "ingestion_unauthorized", `Ingestion rejected the temporary project API key${suffix}`);
+    case 403:
+      return new ApiError(status, "ingestion_forbidden", `Ingestion denied this test event for the selected project${suffix}`);
+    case 400:
+    case 422:
+      return new ApiError(status, "invalid_event", `Ingestion rejected the event payload${suffix}`);
+    default:
+      return new ApiError(status, "ingestion_failed", `Failed to send the test event (HTTP ${status})${detail ? `: ${detail}` : "."}`);
+  }
+}
 
 // Insights (Saved Queries)
 export const listInsights = (projectId: string) =>
