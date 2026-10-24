@@ -184,4 +184,87 @@ describe("API client", () => {
     const data = await client.deleteProject("p_1");
     expect(data).toEqual({});
   });
+
+  it("sends a test event through the authenticated project endpoint", async () => {
+    const submittedEvent = {
+      name: "checkout_test",
+      user_id: "cli-user",
+      platform: "macos",
+      properties: { plan: "trial" },
+    };
+    const storedEvent = {
+      name: "checkout_test",
+      client_event_id: "7d74f02f-293f-444f-9c6f-31b3e4b3e59e",
+      timestamp: "2026-10-24T12:00:00Z",
+      environment: "development" as const,
+    };
+    const fetchMock = mockFetch({ status: 201, json: { event: storedEvent } });
+
+    const data = await client.sendTestEvent("p_selected", submittedEvent);
+
+    const { url, init, headers } = lastRequest(fetchMock);
+    expect(url).toBe(`${BASE}/projects/p_selected/events/test`);
+    expect(init.method).toBe("POST");
+    expect(headers.Authorization).toBe("Bearer stored-token");
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(JSON.parse(init.body as string)).toEqual({ event: submittedEvent });
+    expect(data).toEqual({ event: storedEvent });
+  });
+
+  it("omits the request body so the server supplies the default test event", async () => {
+    const fetchMock = mockFetch({
+      status: 201,
+      json: {
+        event: {
+          name: "cli_test_event",
+          client_event_id: "event-id",
+          timestamp: "2026-10-24T12:00:00Z",
+          environment: "development",
+        },
+      },
+    });
+
+    await client.sendTestEvent("p_selected");
+
+    const { init, headers } = lastRequest(fetchMock);
+    expect(init.body).toBeUndefined();
+    expect(headers["Content-Type"]).toBeUndefined();
+  });
+
+  it.each([
+    [401, { error: "unauthorized", message: "Invalid token" }, "unauthorized", "Authentication expired"],
+    [403, { error: "forbidden", message: "No access" }, "forbidden", "permission to send events"],
+    [404, { error: "not_found", message: "Project not found" }, "not_found", "Project p_selected was not found"],
+    [
+      422,
+      {
+        error: "validation_failed",
+        message: "Event is invalid.",
+        details: { event: ["test event name must be a custom event and cannot start with $"] },
+      },
+      "validation_failed",
+      "cannot start with $",
+    ],
+    [
+      429,
+      { error: "rate_limited", message: "Test event rate limit exceeded", retry_after: 37 },
+      "rate_limited",
+      "Retry after 37 seconds",
+    ],
+    [500, { error: "internal_error", message: "Test event could not be stored" }, "internal_error", "could not be stored"],
+  ] as const)("maps a %i test-event response to a clear error", async (
+    status,
+    response,
+    code,
+    message,
+  ) => {
+    mockFetch({ status, json: response });
+
+    const error = await client.sendTestEvent("p_selected", { name: "test" })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(client.ApiError);
+    expect(error).toMatchObject({ status, code });
+    expect((error as Error).message).toContain(message);
+  });
 });

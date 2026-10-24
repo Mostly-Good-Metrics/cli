@@ -42,6 +42,12 @@ mgm dashboard --project prj_123 --range 7d
 mgm events types --project prj_123
 mgm events list --project prj_123 --range 7d
 
+# Send a development-tagged test event. The JSON argument is optional.
+mgm events send --project prj_123
+mgm events send '{"name":"checkout_test","properties":{"source":"cli"}}' --project prj_123
+
+# Test events still count in dashboards unless the query filters environment=development.
+
 # Define an event before it is first sent, so it is ready for funnels and dashboards.
 # This creates metadata only; it does not emit an analytics event.
 mgm events define checkout_completed \
@@ -278,7 +284,7 @@ Use `mgm commands --json` for the complete command tree, including all subcomman
 
 Interactive credentials are stored in the operating system credential store when available (macOS Keychain, Windows Credential Manager, or the Linux secret service). If no native store is available, the fallback config file is restricted to the current user.
 
-`mgm init` writes `.mgm.json` in the current directory with the selected project context. Treat API keys printed by `mgm keys create` as secrets and store them in your CI secret manager. Human-readable `mgm keys list` output reports only whether each key is restricted; use `--json` when you need the full identifier allowlist.
+`mgm init` writes `.mgm.json` in the current directory with the selected project context. Treat API keys printed by `mgm keys create` as secrets and store them in your CI secret manager. Human-readable `mgm keys list` output reports only whether each key is restricted; use `--json` when you need the full identifier allowlist. `mgm events send` uses the normal authenticated API and stores a real event tagged with `environment: "development"`. The event still counts toward dashboards and usage unless queries explicitly filter by environment.
 
 ## Development
 

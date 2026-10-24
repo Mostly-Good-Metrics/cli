@@ -50,6 +50,7 @@ describe("auth-required commands fail without a token", () => {
     [["keys", "list", "--project", "p_1"], () => client.listApiKeys],
     [["dashboard", "--project", "p_1"], () => client.getDashboard],
     [["events", "list", "--project", "p_1"], () => client.listEvents],
+    [["events", "send", "--project", "p_1"], () => client.sendTestEvent],
     [["funnels", "list", "--project", "p_1"], () => client.listFunnels],
     [["queries", "list", "--project", "p_1"], () => client.listInsights],
     [["widgets", "list", "--project", "p_1"], () => client.listWidgets],
@@ -627,6 +628,62 @@ describe("events", () => {
       description: "A customer completes checkout",
     });
     expect(output()).toContain("No analytics event was sent");
+  });
+
+  it("send selects the requested project and supplies the default event name", async () => {
+    vi.mocked(client.sendTestEvent).mockResolvedValue({
+      event: {
+        name: "cli_test_event",
+        client_event_id: "event-id",
+        timestamp: "2026-10-24T12:00:00Z",
+        environment: "development",
+      },
+    });
+
+    await run(program, "events", "send", "--project", "p_selected");
+
+    expect(client.sendTestEvent).toHaveBeenCalledWith("p_selected", undefined);
+    expect(output()).toContain("Event sent.");
+  });
+
+  it("send passes explicit fields unchanged and prints the server response as JSON", async () => {
+    vi.mocked(client.sendTestEvent).mockResolvedValue({
+      event: {
+        name: "checkout_test",
+        client_event_id: "event-id",
+        timestamp: "2026-10-24T12:00:00Z",
+        environment: "development",
+      },
+    });
+
+    await run(
+      program,
+      "events", "send",
+      '{"name":"checkout_test","platform":"web","properties":{"safe":true}}',
+      "--project", "p_1",
+      "--json",
+    );
+
+    expect(client.sendTestEvent).toHaveBeenCalledWith("p_1", {
+      name: "checkout_test",
+      platform: "web",
+      properties: { safe: true },
+    });
+    expect(JSON.parse(output())).toEqual({
+      status: "sent",
+      event: {
+        name: "checkout_test",
+        client_event_id: "event-id",
+        timestamp: "2026-10-24T12:00:00Z",
+        environment: "development",
+      },
+    });
+  });
+
+  it("send rejects invalid JSON without attempting ingestion", async () => {
+    await expect(run(program, "events", "send", "not-json", "--project", "p_1"))
+      .rejects.toThrow("Invalid event JSON");
+    expect(client.sendTestEvent).not.toHaveBeenCalled();
   });
 });
 

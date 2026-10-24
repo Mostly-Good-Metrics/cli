@@ -3,6 +3,16 @@ import * as client from "../client.js";
 import * as auth from "../auth.js";
 import * as output from "../output.js";
 import { requireProjectId } from "../context.js";
+import { CliUsageError } from "../runtime.js";
+
+export function prepareTestEvent(event: unknown): Record<string, unknown> {
+  if (event === null || Array.isArray(event) || typeof event !== "object") {
+    throw new CliUsageError("Event JSON must be an object.");
+  }
+
+  const input = event as Record<string, unknown>;
+  return input;
+}
 
 export function registerEventsCommands(program: Command): void {
   const events = program
@@ -103,40 +113,32 @@ export function registerEventsCommands(program: Command): void {
 
   events
     .command("send")
-    .description("Send a test event")
-    .argument("<event>", "Event JSON (e.g. '{\"name\":\"test\"}')")
+    .description("Send a development-tagged event; it counts unless dashboards filter by environment")
+    .argument(
+      "[event]",
+      "Event JSON; omitted defaults to cli_test_event",
+    )
     .option("--project <id>", "Project ID")
     .option("--json", "Output as JSON")
-    .action(async (eventJson: string, opts: { project?: string; json?: boolean }) => {
+    .action(async (eventJson: string | undefined, opts: { project?: string; json?: boolean }) => {
       auth.requireToken();
       const projectId = requireProjectId(opts.project);
 
-      let event: Record<string, unknown>;
-      try {
-        event = JSON.parse(eventJson);
-      } catch {
-        console.error("Invalid JSON. Example: '{\"name\":\"test_event\"}'");
-        process.exit(1);
+      let event: Record<string, unknown> | undefined;
+      if (eventJson !== undefined) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(eventJson);
+        } catch {
+          throw new CliUsageError("Invalid event JSON. Example: '{\"name\":\"test_event\"}'");
+        }
+        event = prepareTestEvent(parsed);
       }
 
-      // Send via the ingestion endpoint
-      const res = await fetch("https://ingest.mostlygoodmetrics.com/v1/events", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${auth.requireToken()}`,
-        },
-        body: JSON.stringify({ events: [event] }),
-      });
-
-      if (!res.ok) {
-        const body = await res.text();
-        console.error(`Failed to send event: ${res.status} ${body}`);
-        process.exit(1);
-      }
+      const data = await client.sendTestEvent(projectId, event);
 
       if (opts.json) {
-        output.json({ status: "sent", event });
+        output.json({ status: "sent", event: data.event });
         return;
       }
       console.log("Event sent.");

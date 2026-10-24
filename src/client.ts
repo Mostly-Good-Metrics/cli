@@ -7,6 +7,8 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
+    public details?: unknown,
+    public retryAfter?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -41,12 +43,21 @@ async function request<T>(
   if (!res.ok) {
     let code = "unknown";
     let message = `HTTP ${res.status}`;
+    let details: unknown;
+    let retryAfter: number | undefined;
     try {
-      const err = (await res.json()) as { error?: string; message?: string };
+      const err = (await res.json()) as {
+        error?: string;
+        message?: string;
+        details?: unknown;
+        retry_after?: number;
+      };
       code = err.error ?? code;
       message = err.message ?? message;
+      details = err.details;
+      retryAfter = err.retry_after;
     } catch {}
-    throw new ApiError(res.status, code, message);
+    throw new ApiError(res.status, code, message, details, retryAfter);
   }
 
   if (res.status === 204) return {} as T;
@@ -143,6 +154,55 @@ export const listEventDefinitions = (projectId: string) =>
 
 export const createEventDefinition = (projectId: string, attrs: Record<string, unknown>) =>
   request<{ definition: EventDefinition }>("POST", `/projects/${projectId}/events/definitions`, { body: attrs });
+
+export async function sendTestEvent(
+  projectId: string,
+  event?: Record<string, unknown>,
+): Promise<{ event: TestEvent }> {
+  try {
+    return await request<{ event: TestEvent }>(
+      "POST",
+      `/projects/${projectId}/events/test`,
+      event ? { body: { event } } : {},
+    );
+  } catch (error) {
+    throw testEventError(error, projectId);
+  }
+}
+
+function testEventError(error: unknown, projectId: string): unknown {
+  if (!(error instanceof ApiError)) return error;
+
+  switch (error.status) {
+    case 401:
+      return new ApiError(401, "unauthorized", "Authentication expired. Run `mgm login` again.");
+    case 403:
+      return new ApiError(403, "forbidden", `You do not have permission to send events to project ${projectId}.`);
+    case 404:
+      return new ApiError(404, "not_found", `Project ${projectId} was not found.`);
+    case 422:
+      return new ApiError(422, "validation_failed", `Event is invalid${formatEventDetails(error.details)}.`);
+    case 429:
+      return new ApiError(
+        429,
+        "rate_limited",
+        error.retryAfter === undefined
+          ? "Test event rate limit exceeded. Try again later."
+          : `Test event rate limit exceeded. Retry after ${error.retryAfter} seconds.`,
+      );
+    case 500:
+      return new ApiError(500, "internal_error", "The test event could not be stored. Try again later.");
+    default:
+      return error;
+  }
+}
+
+function formatEventDetails(details: unknown): string {
+  if (details === null || typeof details !== "object") return "";
+  const eventDetails = (details as { event?: unknown }).event;
+  if (!Array.isArray(eventDetails) || eventDetails.length === 0) return "";
+  return `: ${eventDetails.map(String).join(", ")}`;
+}
 
 // Insights (Saved Queries)
 export const listInsights = (projectId: string) =>
@@ -341,6 +401,13 @@ export interface EventDefinition {
   description?: string;
   event_count?: number;
   first_seen_at?: string | null;
+}
+
+export interface TestEvent {
+  name: string;
+  client_event_id: string;
+  timestamp: string;
+  environment: "development";
 }
 
 export interface SavedQuery {
