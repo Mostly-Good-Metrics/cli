@@ -204,6 +204,81 @@ function formatEventDetails(details: unknown): string {
   return `: ${eventDetails.map(String).join(", ")}`;
 }
 
+// End-user privacy
+export async function exportUserDataPage(
+  projectId: string,
+  userId: string,
+  cursor?: string,
+): Promise<UserDataExportPage> {
+  try {
+    return await request<UserDataExportPage>(
+      "GET",
+      `/projects/${projectId}/users/export`,
+      {
+        params: {
+          user_id: userId,
+          limit: "1000",
+          ...(cursor ? { cursor } : {}),
+        },
+      },
+    );
+  } catch (error) {
+    throw privacyActionError(error, "export", projectId);
+  }
+}
+
+export async function eraseUserData(
+  projectId: string,
+  userId: string,
+): Promise<UserDataEraseResponse> {
+  try {
+    return await request<UserDataEraseResponse>(
+      "POST",
+      `/projects/${projectId}/users/erase`,
+      { body: { user_id: userId } },
+    );
+  } catch (error) {
+    throw privacyActionError(error, "erase", projectId);
+  }
+}
+
+function privacyActionError(
+  error: unknown,
+  action: "export" | "erase",
+  projectId: string,
+): unknown {
+  if (!(error instanceof ApiError)) return error;
+
+  const actionName = action === "export" ? "User data export" : "User data erasure";
+  switch (error.status) {
+    case 401:
+      return new ApiError(
+        401,
+        "unauthorized",
+        `${actionName} requires an owner or admin login. Run \`mgm login\`; project ingestion keys are not supported.`,
+      );
+    case 403:
+      return new ApiError(
+        403,
+        "forbidden",
+        `${actionName} requires owner or admin access to project ${projectId}.`,
+      );
+    case 404:
+      return new ApiError(404, "not_found", `Project ${projectId} was not found.`);
+    case 422:
+      return new ApiError(
+        422,
+        error.code,
+        error.code === "too_many_aliases"
+          ? "User data export is unavailable because this identity has more than 1,000 linked IDs."
+          : `${actionName} was rejected: ${error.message}`,
+        error.details,
+      );
+    default:
+      return error;
+  }
+}
+
 // Insights (Saved Queries)
 export const listInsights = (projectId: string) =>
   request<{ queries: SavedQuery[] }>("GET", `/projects/${projectId}/insights`);
@@ -388,6 +463,32 @@ export interface Event {
   user_id?: string;
   properties?: Record<string, unknown>;
   timestamp: string;
+}
+
+export interface UserDataExportPage {
+  user_id: string;
+  resolved_user_ids: string[];
+  profiles: Record<string, unknown>[];
+  experiment_variant_assignments: Record<string, unknown>[];
+  events: Record<string, unknown>[];
+  pagination: {
+    limit: number;
+    has_more: boolean;
+    next_cursor: string | null;
+    snapshot_at: string;
+  };
+}
+
+export interface UserDataEraseResponse {
+  status: "accepted";
+  deletion: {
+    events: number;
+    user_daily_events: number;
+    profiles: number;
+    experiment_variant_assignments: number;
+    aliases: number;
+    clickhouse_job_enqueued: boolean;
+  };
 }
 
 export interface EventType {

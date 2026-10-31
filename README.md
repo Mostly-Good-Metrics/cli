@@ -218,6 +218,31 @@ server applied the requested environment and complete allowlist before revealing
 the one-time key. The same access choice is required by `mgm init`; its key
 environment defaults to `development` and can be changed with `--environment`.
 
+### Export or erase end-user data
+
+Owners and admins can export or erase the data associated with one end-user ID.
+These commands require a user login or personal access token; project ingestion
+keys are rejected.
+
+```bash
+# Follow every server page and write one combined JSON document to stdout.
+mgm users export account_123 --project prj_123
+
+# Stream the combined export to a file instead.
+mgm users export account_123 --project prj_123 --out user-data.json
+
+# Confirm interactively before permanently erasing the user's data.
+mgm users erase account_123 --project prj_123
+
+# Explicitly authorize erasure in a script and return the deletion summary as JSON.
+mgm users erase account_123 --project prj_123 --no-input --yes --json
+```
+
+Export includes linked anonymous IDs, profiles, experiment assignments, and raw
+events. Identity expansion is limited to 1,000 linked IDs. Erasure reports the
+PostgreSQL deletion counts and whether the durable ClickHouse cleanup job was
+enqueued.
+
 ## Automation and agents
 
 The CLI is designed to be discoverable and safe in non-interactive environments.
