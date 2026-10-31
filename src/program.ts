@@ -14,6 +14,7 @@ import { registerWidgetsCommands } from "./commands/widgets.js";
 import { registerDiscoveryCommands } from "./commands/discovery.js";
 import { registerSkillsCommands } from "./commands/skills.js";
 import { registerGoalsCommands } from "./commands/goals.js";
+import { registerUsersCommands } from "./commands/users.js";
 import { configureRuntimeOptions } from "./runtime.js";
 
 export const VERSION = "0.1.4";
@@ -44,6 +45,7 @@ export function buildProgram(): Command {
   registerRetentionCommands(program);
   registerExperimentsCommands(program);
   registerGoalsCommands(program);
+  registerUsersCommands(program);
   registerQueriesCommands(program);
   registerWidgetsCommands(program);
   registerDiscoveryCommands(program);

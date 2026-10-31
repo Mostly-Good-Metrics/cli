@@ -55,6 +55,8 @@ describe("auth-required commands fail without a token", () => {
     [["queries", "list", "--project", "p_1"], () => client.listInsights],
     [["widgets", "list", "--project", "p_1"], () => client.listWidgets],
     [["goals", "list", "--project", "p_1"], () => client.listGoalSnapshots],
+    [["users", "export", "user_1", "--project", "p_1"], () => client.exportUserDataPage],
+    [["users", "erase", "user_1", "--project", "p_1", "--yes"], () => client.eraseUserData],
   ];
 
   it.each(cases.map(([args, fn]) => [args.join(" "), args, fn] as const))(
@@ -1168,6 +1170,8 @@ describe("parsing", () => {
     expect(commands.some((command) => command.path === "experiments update")).toBe(true);
     expect(commands.some((command) => command.path === "goals create")).toBe(true);
     expect(commands.some((command) => command.path === "dashboard filters")).toBe(true);
+    expect(commands.some((command) => command.path === "users export")).toBe(true);
+    expect(commands.some((command) => command.path === "users erase")).toBe(true);
   });
 
   it("returns a structured schema for a command path", async () => {
